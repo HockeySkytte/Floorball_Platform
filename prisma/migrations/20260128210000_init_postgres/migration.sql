@@ -1,7 +1,4 @@
-﻿-- CreateSchema
-CREATE SCHEMA IF NOT EXISTS "public";
-
--- CreateEnum
+﻿-- CreateEnum
 CREATE TYPE "GlobalRole" AS ENUM ('ADMIN', 'USER');
 
 -- CreateEnum
