@@ -15,7 +15,8 @@ export default async function PublicLayout({
           user
             ? {
                 username: user.username,
-                role: user.activeRole ?? "USER",
+                isAdmin: user.isAdmin,
+                teamRole: user.activeRole,
               }
             : null
         }
