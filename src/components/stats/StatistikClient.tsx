@@ -33,13 +33,15 @@ type StatsEvent = {
   p2Name: string | null;
   xM: number | null;
   yM: number | null;
+  videoUrl?: string | null;
+  videoTime?: number | null;
   gameId: string | null;
   gameDate?: string | null;
   competition: string | null;
   file: { id: string; originalName: string; createdAt: string };
 };
 
-type TabKey = "events" | "shotmap" | "heatmap" | "tabeller" | "video";
+type TabKey = "events" | "shotmap" | "heatmap" | "tabeller";
 
 type StatsPlayerSummary = {
   id: string;
@@ -394,6 +396,265 @@ function KpiCard({
   );
 }
 
+function parseYouTubeId(input: string | null | undefined): string | null {
+  const raw = String(input ?? "").trim();
+  if (!raw) return null;
+  if (/^[a-zA-Z0-9_-]{11}$/.test(raw)) return raw;
+  try {
+    const url = new URL(raw);
+    const host = url.hostname.toLowerCase();
+    if (host.includes("youtu.be")) {
+      const id = url.pathname.replace(/^\//, "").split("/")[0] ?? "";
+      return /^[a-zA-Z0-9_-]{11}$/.test(id) ? id : null;
+    }
+    if (host.includes("youtube.com")) {
+      const v = url.searchParams.get("v");
+      if (v && /^[a-zA-Z0-9_-]{11}$/.test(v)) return v;
+      const parts = url.pathname.split("/").filter(Boolean);
+      const embedIdx = parts.indexOf("embed");
+      if (embedIdx >= 0) {
+        const id = parts[embedIdx + 1] ?? "";
+        return /^[a-zA-Z0-9_-]{11}$/.test(id) ? id : null;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+function formatSeconds(total: number) {
+  const t = Math.max(0, Math.floor(total));
+  const m = Math.floor(t / 60);
+  const s = t % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+function VideoSection({
+  title,
+  events,
+}: {
+  title: string;
+  events: StatsEvent[];
+}) {
+  const [beforeSec, setBeforeSec] = useState<number>(5);
+  const [afterSec, setAfterSec] = useState<number>(5);
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const [playAll, setPlayAll] = useState(false);
+  const timerRef = useRef<number | null>(null);
+
+  const rows = useMemo(() => {
+    return events.map((e) => {
+      const ytId = parseYouTubeId(e.videoUrl ?? null);
+      const t = typeof e.videoTime === "number" && Number.isFinite(e.videoTime) ? e.videoTime : null;
+      const start = t !== null ? Math.max(0, Math.floor(t - beforeSec)) : null;
+      const end = t !== null ? Math.max(0, Math.floor(t + afterSec)) : null;
+      return {
+        e,
+        ytId,
+        t,
+        start,
+        end,
+        playable: Boolean(ytId && start !== null && end !== null),
+      };
+    });
+  }, [events, beforeSec, afterSec]);
+
+  function findFirstPlayableIndex() {
+    for (let i = 0; i < rows.length; i++) if (rows[i]!.playable) return i;
+    return null;
+  }
+
+  function findNextPlayableIndex(startFromExclusive: number) {
+    for (let i = startFromExclusive + 1; i < rows.length; i++) if (rows[i]!.playable) return i;
+    return null;
+  }
+
+  const selectedRow = selectedIndex !== null ? rows[selectedIndex] ?? null : null;
+  const embedSrc = useMemo(() => {
+    if (!selectedRow?.playable) return null;
+    const id = selectedRow.ytId!;
+    const start = selectedRow.start ?? 0;
+    const end = selectedRow.end ?? Math.max(0, start + 1);
+    const params = new URLSearchParams({
+      start: String(start),
+      end: String(end),
+      autoplay: "1",
+      rel: "0",
+      modestbranding: "1",
+      playsinline: "1",
+      controls: "1",
+    });
+    return `https://www.youtube.com/embed/${id}?${params.toString()}`;
+  }, [selectedRow]);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current !== null) {
+        window.clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!playAll) return;
+    if (selectedIndex === null) return;
+    const row = rows[selectedIndex];
+    if (!row?.playable) return;
+
+    const duration = Math.max(1, (row.end ?? 0) - (row.start ?? 0));
+    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+
+    timerRef.current = window.setTimeout(() => {
+      const next = findNextPlayableIndex(selectedIndex);
+      if (next === null) {
+        setPlayAll(false);
+        return;
+      }
+      setSelectedIndex(next);
+    }, duration * 1000 + 250);
+
+    return () => {
+      if (timerRef.current !== null) {
+        window.clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [playAll, selectedIndex, rows]);
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="text-base font-semibold text-zinc-700">{title}</div>
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <label className="flex items-center gap-1">
+            <span className="text-zinc-600">Før</span>
+            <input
+              type="number"
+              min={0}
+              max={120}
+              value={beforeSec}
+              onChange={(e) => setBeforeSec(Math.max(0, Number(e.target.value) || 0))}
+              className="w-16 rounded-md border border-[color:var(--surface-border)] bg-transparent px-2 py-1"
+            />
+            <span className="text-zinc-600">s</span>
+          </label>
+          <label className="flex items-center gap-1">
+            <span className="text-zinc-600">Efter</span>
+            <input
+              type="number"
+              min={0}
+              max={120}
+              value={afterSec}
+              onChange={(e) => setAfterSec(Math.max(0, Number(e.target.value) || 0))}
+              className="w-16 rounded-md border border-[color:var(--surface-border)] bg-transparent px-2 py-1"
+            />
+            <span className="text-zinc-600">s</span>
+          </label>
+          <button
+            type="button"
+            className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+            disabled={rows.every((r) => !r.playable)}
+            onClick={() => {
+              const start =
+                selectedIndex !== null && rows[selectedIndex]?.playable ? selectedIndex : findFirstPlayableIndex();
+              if (start === null) return;
+              setSelectedIndex(start);
+              setPlayAll(true);
+            }}
+          >
+            Afspil Alle
+          </button>
+          {playAll ? (
+            <button
+              type="button"
+              className="rounded-md border border-[color:var(--surface-border)] px-3 py-1.5 text-sm"
+              onClick={() => setPlayAll(false)}
+            >
+              Stop
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:items-start">
+        <div className="space-y-2">
+          <div className="aspect-video w-full overflow-hidden rounded-md bg-black/90">
+            {embedSrc ? (
+              <iframe
+                key={embedSrc}
+                src={embedSrc}
+                className="h-full w-full"
+                allow="autoplay; encrypted-media"
+                allowFullScreen
+                title="Video"
+              />
+            ) : (
+              <div className="grid h-full w-full place-items-center text-sm text-white/70">Vælg et event med video.</div>
+            )}
+          </div>
+          {selectedRow?.playable ? (
+            <div className="text-xs text-zinc-600">
+              Clip: {formatSeconds(selectedRow.start ?? 0)} - {formatSeconds(selectedRow.end ?? 0)}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="max-h-[380px] overflow-auto rounded-md border border-[color:var(--surface-border)]">
+          <table className="min-w-[700px] w-full border-collapse text-sm">
+            <thead className="sticky top-0 z-10 bg-[color:var(--surface)]">
+              <tr className="border-b border-[color:var(--surface-border)] text-left">
+                <th className="py-2 pl-3 pr-2">#</th>
+                <th className="py-2 pr-2">Per</th>
+                <th className="py-2 pr-2">Event</th>
+                <th className="py-2 pr-2">P1</th>
+                <th className="py-2 pr-2">P2</th>
+                <th className="py-2 pr-3">Video</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, idx) => {
+                const isSelected = selectedIndex === idx;
+                return (
+                  <tr
+                    key={r.e.id}
+                    className={
+                      "border-b border-[color:var(--surface-border)] " +
+                      (r.playable ? "cursor-pointer" : "opacity-50") +
+                      (isSelected ? " bg-[color:var(--surface)]" : "")
+                    }
+                    onClick={() => {
+                      if (!r.playable) return;
+                      setPlayAll(false);
+                      setSelectedIndex(idx);
+                    }}
+                  >
+                    <td className="py-2 pl-3 pr-2 tabular-nums">{idx + 1}</td>
+                    <td className="py-2 pr-2 tabular-nums">{r.e.period ?? "-"}</td>
+                    <td className="py-2 pr-2 font-medium">{r.e.event}</td>
+                    <td className="py-2 pr-2">{r.e.p1Name ?? ""}</td>
+                    <td className="py-2 pr-2">{r.e.p2Name ?? ""}</td>
+                    <td className="py-2 pr-3 tabular-nums">{r.playable ? formatSeconds(r.t ?? 0) : "-"}</td>
+                  </tr>
+                );
+              })}
+
+              {rows.length === 0 ? (
+                <tr>
+                  <td className="px-3 py-3 text-sm text-zinc-600" colSpan={6}>
+                    Ingen events.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function HalfRink({
   title,
   half,
@@ -527,7 +788,7 @@ function HalfRink({
   return (
     <div className="space-y-2">
       <div className="text-center text-base font-semibold text-zinc-600">{title}</div>
-      <div className="relative overflow-hidden rounded-md border border-[color:var(--surface-border)] bg-[color:var(--surface)]">
+      <div className="relative overflow-hidden">
         <div className="relative aspect-[1/1] w-full">
           <img
             src="/bane.png"
@@ -616,7 +877,7 @@ function HeatHalfRink({
   return (
     <div className="space-y-2">
       <div className="text-center text-base font-semibold text-zinc-600">{title}</div>
-      <div className="relative overflow-hidden rounded-md border border-[color:var(--surface-border)] bg-[color:var(--surface)]">
+      <div className="relative overflow-hidden">
         <div className="relative aspect-[1/1] w-full">
           <img
             src="/bane.png"
@@ -696,7 +957,6 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
         { key: "shotmap" as const, label: "Shot Map" },
         { key: "heatmap" as const, label: "Heat Map" },
         { key: "tabeller" as const, label: "Tabeller" },
-        { key: "video" as const, label: "Video" },
       ],
     []
   );
@@ -1322,6 +1582,11 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
     return computeShotMapKpis(base, selectedTeam);
   }, [shotMapEvents, filters.perspektiv, selectedShotEventIdSet]);
 
+  const shotMapSelectedEvents = useMemo(() => {
+    if (selectedShotEventIdSet.size === 0) return shotMapEvents;
+    return shotMapEvents.filter((e) => selectedShotEventIdSet.has(String(e.id)));
+  }, [shotMapEvents, selectedShotEventIdSet]);
+
   const heatmap = useMemo(() => {
     const selectedTeam = String(filters.perspektiv ?? "").trim();
     if (!selectedTeam || !zones) {
@@ -1657,230 +1922,226 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
         </section>
       ) : tab === "shotmap" ? (
         <section className="space-y-6">
-          <div className="rounded-md border border-[color:var(--surface-border)] p-4">
-            {eventsError ? (
-              <p className="mt-2 text-sm text-red-600">{eventsError}</p>
-            ) : null}
+          {eventsError ? <p className="mt-2 text-sm text-red-600">{eventsError}</p> : null}
 
-            {String(filters.perspektiv ?? "").trim().length === 0 ? (
-              <p className="mt-4 text-sm text-zinc-600">Vælg et Perspektiv.</p>
-            ) : shotMapEvents.length === 0 ? (
-              <p className="mt-4 text-sm text-zinc-600">Ingen events.</p>
-            ) : (
-              <div className="mt-4 grid gap-2 md:grid-cols-[minmax(0,1fr)_180px_minmax(0,1fr)] md:items-stretch">
-                <HalfRink
-                  title="Defensive End"
-                  half="left"
-                  events={shotMapEvents}
-                  selectedTeam={String(filters.perspektiv ?? "").trim()}
-                  flipByPeriod={shotMapFlipByPeriod}
-                  teamColors={teamColors}
-                  selectedEventIds={selectedShotEventIdSet}
-                  onToggleEvent={toggleShotEvent}
-                  onSetSelection={setShotSelection}
-                />
+          {String(filters.perspektiv ?? "").trim().length === 0 ? (
+            <p className="mt-4 text-sm text-zinc-600">Vælg et Perspektiv.</p>
+          ) : shotMapEvents.length === 0 ? (
+            <p className="mt-4 text-sm text-zinc-600">Ingen events.</p>
+          ) : (
+            <div className="mt-4 grid gap-2 md:grid-cols-[minmax(0,1fr)_180px_minmax(0,1fr)] md:items-stretch">
+              <HalfRink
+                title="Defensive End"
+                half="left"
+                events={shotMapEvents}
+                selectedTeam={String(filters.perspektiv ?? "").trim()}
+                flipByPeriod={shotMapFlipByPeriod}
+                teamColors={teamColors}
+                selectedEventIds={selectedShotEventIdSet}
+                onToggleEvent={toggleShotEvent}
+                onSetSelection={setShotSelection}
+              />
 
-                <div className="flex h-full flex-col justify-between gap-2">
-                  {shotMapKpis ? (
-                    <>
-                      <KpiCard
-                        title="Corsi"
-                        leftLabel="CA"
-                        midLabel="CF%"
-                        rightLabel="CF"
-                        leftValue={String(shotMapKpis.corsi.ca)}
-                        midValue={String(pct(shotMapKpis.corsi.cfPct))}
-                        rightValue={String(shotMapKpis.corsi.cf)}
-                        midBg={colorScaleRedWhiteBlue(shotMapKpis.corsi.cfPct, 20, 50, 80)}
-                        className="flex-1"
-                      />
-                      <KpiCard
-                        title="Fenwick"
-                        leftLabel="FA"
-                        midLabel="FF%"
-                        rightLabel="FF"
-                        leftValue={String(shotMapKpis.fenwick.fa)}
-                        midValue={String(pct(shotMapKpis.fenwick.ffPct))}
-                        rightValue={String(shotMapKpis.fenwick.ff)}
-                        midBg={colorScaleRedWhiteBlue(shotMapKpis.fenwick.ffPct, 20, 50, 80)}
-                        className="flex-1"
-                      />
-                      <KpiCard
-                        title="Shots"
-                        leftLabel="SA"
-                        midLabel="SF%"
-                        rightLabel="SF"
-                        leftValue={String(shotMapKpis.shots.sa)}
-                        midValue={String(pct(shotMapKpis.shots.sfPct))}
-                        rightValue={String(shotMapKpis.shots.sf)}
-                        midBg={colorScaleRedWhiteBlue(shotMapKpis.shots.sfPct, 20, 50, 80)}
-                        className="flex-1"
-                      />
-                      <KpiCard
-                        title="Goals"
-                        leftLabel="GA"
-                        midLabel="GF%"
-                        rightLabel="GF"
-                        leftValue={String(shotMapKpis.goals.ga)}
-                        midValue={String(pct(shotMapKpis.goals.gfPct))}
-                        rightValue={String(shotMapKpis.goals.gf)}
-                        midBg={colorScaleRedWhiteBlue(shotMapKpis.goals.gfPct, 20, 50, 80)}
-                        className="flex-1"
-                      />
-                      <KpiCard
-                        title="Shooting / Goaltending"
-                        leftLabel="Sv%"
-                        midLabel="PDO"
-                        rightLabel="Sh%"
-                        leftValue={String(pct(shotMapKpis.sg.svPct))}
-                        midValue={String(pct(shotMapKpis.sg.pdo))}
-                        rightValue={String(pct(shotMapKpis.sg.shPct))}
-                        midBg={colorScaleRedWhiteBlue(shotMapKpis.sg.pdo, 90, 100, 110)}
-                        className="flex-1"
-                      />
-                    </>
-                  ) : null}
-                </div>
+              <div className="flex h-full flex-col justify-between gap-2">
+                {shotMapKpis ? (
+                  <>
+                    <KpiCard
+                      title="Corsi"
+                      leftLabel="CA"
+                      midLabel="CF%"
+                      rightLabel="CF"
+                      leftValue={String(shotMapKpis.corsi.ca)}
+                      midValue={String(pct(shotMapKpis.corsi.cfPct))}
+                      rightValue={String(shotMapKpis.corsi.cf)}
+                      midBg={colorScaleRedWhiteBlue(shotMapKpis.corsi.cfPct, 20, 50, 80)}
+                      className="flex-1"
+                    />
+                    <KpiCard
+                      title="Fenwick"
+                      leftLabel="FA"
+                      midLabel="FF%"
+                      rightLabel="FF"
+                      leftValue={String(shotMapKpis.fenwick.fa)}
+                      midValue={String(pct(shotMapKpis.fenwick.ffPct))}
+                      rightValue={String(shotMapKpis.fenwick.ff)}
+                      midBg={colorScaleRedWhiteBlue(shotMapKpis.fenwick.ffPct, 20, 50, 80)}
+                      className="flex-1"
+                    />
+                    <KpiCard
+                      title="Shots"
+                      leftLabel="SA"
+                      midLabel="SF%"
+                      rightLabel="SF"
+                      leftValue={String(shotMapKpis.shots.sa)}
+                      midValue={String(pct(shotMapKpis.shots.sfPct))}
+                      rightValue={String(shotMapKpis.shots.sf)}
+                      midBg={colorScaleRedWhiteBlue(shotMapKpis.shots.sfPct, 20, 50, 80)}
+                      className="flex-1"
+                    />
+                    <KpiCard
+                      title="Goals"
+                      leftLabel="GA"
+                      midLabel="GF%"
+                      rightLabel="GF"
+                      leftValue={String(shotMapKpis.goals.ga)}
+                      midValue={String(pct(shotMapKpis.goals.gfPct))}
+                      rightValue={String(shotMapKpis.goals.gf)}
+                      midBg={colorScaleRedWhiteBlue(shotMapKpis.goals.gfPct, 20, 50, 80)}
+                      className="flex-1"
+                    />
+                    <KpiCard
+                      title="Shooting / Goaltending"
+                      leftLabel="Sv%"
+                      midLabel="PDO"
+                      rightLabel="Sh%"
+                      leftValue={String(pct(shotMapKpis.sg.svPct))}
+                      midValue={String(pct(shotMapKpis.sg.pdo))}
+                      rightValue={String(pct(shotMapKpis.sg.shPct))}
+                      midBg={colorScaleRedWhiteBlue(shotMapKpis.sg.pdo, 90, 100, 110)}
+                      className="flex-1"
+                    />
+                  </>
+                ) : null}
+              </div>
 
-                <HalfRink
-                  title="Offensive End"
-                  half="right"
-                  events={shotMapEvents}
-                  selectedTeam={String(filters.perspektiv ?? "").trim()}
-                  flipByPeriod={shotMapFlipByPeriod}
-                  teamColors={teamColors}
-                  selectedEventIds={selectedShotEventIdSet}
-                  onToggleEvent={toggleShotEvent}
-                  onSetSelection={setShotSelection}
-                />
-              </div>
-            )}
+              <HalfRink
+                title="Offensive End"
+                half="right"
+                events={shotMapEvents}
+                selectedTeam={String(filters.perspektiv ?? "").trim()}
+                flipByPeriod={shotMapFlipByPeriod}
+                teamColors={teamColors}
+                selectedEventIds={selectedShotEventIdSet}
+                onToggleEvent={toggleShotEvent}
+                onSetSelection={setShotSelection}
+              />
+            </div>
+          )}
 
-            <div className="mt-5 flex flex-wrap items-center justify-center gap-4 text-sm text-zinc-700">
-              <div className="flex items-center gap-2">
-                <span className="inline-block h-3 w-3 rounded-full border-2 border-[color:var(--surface-foreground)]" />
-                <span>Shot</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="inline-block h-0 w-0 border-l-[7px] border-r-[7px] border-b-[12px] border-l-transparent border-r-transparent border-b-[color:var(--surface-foreground)]" />
-                <span>Miss</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="inline-block h-3 w-3 border-2 border-[color:var(--surface-foreground)]" />
-                <span>Block</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="inline-block h-3 w-3 rotate-45 border-2 border-[color:var(--surface-foreground)]" />
-                <span>Penalty</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-base text-[color:var(--surface-foreground)]">★</span>
-                <span>Goal</span>
-              </div>
+          <div className="mt-3 flex flex-wrap items-center justify-center gap-4 text-sm text-zinc-700">
+            <div className="flex items-center gap-2">
+              <span className="inline-block h-3 w-3 rounded-full border-2 border-[color:var(--surface-foreground)]" />
+              <span>Shot</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="inline-block h-0 w-0 border-l-[7px] border-r-[7px] border-b-[12px] border-l-transparent border-r-transparent border-b-[color:var(--surface-foreground)]" />
+              <span>Miss</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="inline-block h-3 w-3 border-2 border-[color:var(--surface-foreground)]" />
+              <span>Block</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="inline-block h-3 w-3 rotate-45 border-2 border-[color:var(--surface-foreground)]" />
+              <span>Penalty</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-base text-[color:var(--surface-foreground)]">★</span>
+              <span>Goal</span>
             </div>
           </div>
+
+          <VideoSection title="Video" events={shotMapSelectedEvents} />
         </section>
       ) : tab === "heatmap" ? (
         <section className="space-y-6">
-          <div className="rounded-md border border-[color:var(--surface-border)] p-4">
-            {eventsError ? <p className="mt-2 text-sm text-red-600">{eventsError}</p> : null}
+          {eventsError ? <p className="mt-2 text-sm text-red-600">{eventsError}</p> : null}
 
-            {String(filters.perspektiv ?? "").trim().length === 0 ? (
-              <p className="mt-4 text-sm text-zinc-600">Vælg et Perspektiv.</p>
-            ) : shotMapEvents.length === 0 ? (
-              <p className="mt-4 text-sm text-zinc-600">Ingen events.</p>
-            ) : zonesError ? (
-              <p className="mt-4 text-sm text-red-600">{zonesError}</p>
-            ) : !zones ? (
-              <p className="mt-4 text-sm text-zinc-600">Indlæser zoner…</p>
-            ) : (
-              <>
-                <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_180px_minmax(0,1fr)] md:items-stretch">
-                  <HeatHalfRink
-                    title="Defensive End"
-                    half="left"
-                    zones={zones}
-                    fillByZoneId={heatmap.fillByZoneId}
-                    labelByZoneId={heatmap.labelByZoneId}
-                    selectedZoneCode={selectedZoneCode}
-                    onSelectZone={onSelectZone}
-                  />
+          {String(filters.perspektiv ?? "").trim().length === 0 ? (
+            <p className="mt-4 text-sm text-zinc-600">Vælg et Perspektiv.</p>
+          ) : shotMapEvents.length === 0 ? (
+            <p className="mt-4 text-sm text-zinc-600">Ingen events.</p>
+          ) : zonesError ? (
+            <p className="mt-4 text-sm text-red-600">{zonesError}</p>
+          ) : !zones ? (
+            <p className="mt-4 text-sm text-zinc-600">Indlæser zoner…</p>
+          ) : (
+            <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_180px_minmax(0,1fr)] md:items-stretch">
+              <HeatHalfRink
+                title="Defensive End"
+                half="left"
+                zones={zones}
+                fillByZoneId={heatmap.fillByZoneId}
+                labelByZoneId={heatmap.labelByZoneId}
+                selectedZoneCode={selectedZoneCode}
+                onSelectZone={onSelectZone}
+              />
 
-                  <div className="flex h-full flex-col justify-between gap-2">
-                    {heatmapKpis ? (
-                      <>
-                        <KpiCard
-                          title="Corsi"
-                          leftLabel="CA"
-                          midLabel="CF%"
-                          rightLabel="CF"
-                          leftValue={String(heatmapKpis.corsi.ca)}
-                          midValue={String(pct(heatmapKpis.corsi.cfPct))}
-                          rightValue={String(heatmapKpis.corsi.cf)}
-                          midBg={colorScaleRedWhiteBlue(heatmapKpis.corsi.cfPct, 20, 50, 80)}
-                          className="flex-1"
-                        />
-                        <KpiCard
-                          title="Fenwick"
-                          leftLabel="FA"
-                          midLabel="FF%"
-                          rightLabel="FF"
-                          leftValue={String(heatmapKpis.fenwick.fa)}
-                          midValue={String(pct(heatmapKpis.fenwick.ffPct))}
-                          rightValue={String(heatmapKpis.fenwick.ff)}
-                          midBg={colorScaleRedWhiteBlue(heatmapKpis.fenwick.ffPct, 20, 50, 80)}
-                          className="flex-1"
-                        />
-                        <KpiCard
-                          title="Shots"
-                          leftLabel="SA"
-                          midLabel="SF%"
-                          rightLabel="SF"
-                          leftValue={String(heatmapKpis.shots.sa)}
-                          midValue={String(pct(heatmapKpis.shots.sfPct))}
-                          rightValue={String(heatmapKpis.shots.sf)}
-                          midBg={colorScaleRedWhiteBlue(heatmapKpis.shots.sfPct, 20, 50, 80)}
-                          className="flex-1"
-                        />
-                        <KpiCard
-                          title="Goals"
-                          leftLabel="GA"
-                          midLabel="GF%"
-                          rightLabel="GF"
-                          leftValue={String(heatmapKpis.goals.ga)}
-                          midValue={String(pct(heatmapKpis.goals.gfPct))}
-                          rightValue={String(heatmapKpis.goals.gf)}
-                          midBg={colorScaleRedWhiteBlue(heatmapKpis.goals.gfPct, 20, 50, 80)}
-                          className="flex-1"
-                        />
-                        <KpiCard
-                          title="Shooting / Goaltending"
-                          leftLabel="Sv%"
-                          midLabel="PDO"
-                          rightLabel="Sh%"
-                          leftValue={String(pct(heatmapKpis.sg.svPct))}
-                          midValue={String(pct(heatmapKpis.sg.pdo))}
-                          rightValue={String(pct(heatmapKpis.sg.shPct))}
-                          midBg={colorScaleRedWhiteBlue(heatmapKpis.sg.pdo, 90, 100, 110)}
-                          className="flex-1"
-                        />
-                      </>
-                    ) : null}
-                  </div>
+              <div className="flex h-full flex-col justify-between gap-2">
+                {heatmapKpis ? (
+                  <>
+                    <KpiCard
+                      title="Corsi"
+                      leftLabel="CA"
+                      midLabel="CF%"
+                      rightLabel="CF"
+                      leftValue={String(heatmapKpis.corsi.ca)}
+                      midValue={String(pct(heatmapKpis.corsi.cfPct))}
+                      rightValue={String(heatmapKpis.corsi.cf)}
+                      midBg={colorScaleRedWhiteBlue(heatmapKpis.corsi.cfPct, 20, 50, 80)}
+                      className="flex-1"
+                    />
+                    <KpiCard
+                      title="Fenwick"
+                      leftLabel="FA"
+                      midLabel="FF%"
+                      rightLabel="FF"
+                      leftValue={String(heatmapKpis.fenwick.fa)}
+                      midValue={String(pct(heatmapKpis.fenwick.ffPct))}
+                      rightValue={String(heatmapKpis.fenwick.ff)}
+                      midBg={colorScaleRedWhiteBlue(heatmapKpis.fenwick.ffPct, 20, 50, 80)}
+                      className="flex-1"
+                    />
+                    <KpiCard
+                      title="Shots"
+                      leftLabel="SA"
+                      midLabel="SF%"
+                      rightLabel="SF"
+                      leftValue={String(heatmapKpis.shots.sa)}
+                      midValue={String(pct(heatmapKpis.shots.sfPct))}
+                      rightValue={String(heatmapKpis.shots.sf)}
+                      midBg={colorScaleRedWhiteBlue(heatmapKpis.shots.sfPct, 20, 50, 80)}
+                      className="flex-1"
+                    />
+                    <KpiCard
+                      title="Goals"
+                      leftLabel="GA"
+                      midLabel="GF%"
+                      rightLabel="GF"
+                      leftValue={String(heatmapKpis.goals.ga)}
+                      midValue={String(pct(heatmapKpis.goals.gfPct))}
+                      rightValue={String(heatmapKpis.goals.gf)}
+                      midBg={colorScaleRedWhiteBlue(heatmapKpis.goals.gfPct, 20, 50, 80)}
+                      className="flex-1"
+                    />
+                    <KpiCard
+                      title="Shooting / Goaltending"
+                      leftLabel="Sv%"
+                      midLabel="PDO"
+                      rightLabel="Sh%"
+                      leftValue={String(pct(heatmapKpis.sg.svPct))}
+                      midValue={String(pct(heatmapKpis.sg.pdo))}
+                      rightValue={String(pct(heatmapKpis.sg.shPct))}
+                      midBg={colorScaleRedWhiteBlue(heatmapKpis.sg.pdo, 90, 100, 110)}
+                      className="flex-1"
+                    />
+                  </>
+                ) : null}
+              </div>
 
-                  <HeatHalfRink
-                    title="Offensive End"
-                    half="right"
-                    zones={zones}
-                    fillByZoneId={heatmap.fillByZoneId}
-                    labelByZoneId={heatmap.labelByZoneId}
-                    selectedZoneCode={selectedZoneCode}
-                    onSelectZone={onSelectZone}
-                  />
-                </div>
-              </>
-            )}
-          </div>
+              <HeatHalfRink
+                title="Offensive End"
+                half="right"
+                zones={zones}
+                fillByZoneId={heatmap.fillByZoneId}
+                labelByZoneId={heatmap.labelByZoneId}
+                selectedZoneCode={selectedZoneCode}
+                onSelectZone={onSelectZone}
+              />
+            </div>
+          )}
+
+          <VideoSection title="Video" events={heatmapSelectedEvents} />
         </section>
       ) : tab === "tabeller" ? (
         <section className="space-y-4">

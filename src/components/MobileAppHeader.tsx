@@ -109,9 +109,6 @@ export default function MobileAppHeader({
                 <Link className="block px-4 py-4 text-lg font-semibold" href="/oevelser">
                   Øvelser
                 </Link>
-                <Link className="block px-4 py-4 text-lg font-semibold" href="/video">
-                  Video
-                </Link>
                 <Link className="block px-4 py-4 text-lg font-semibold" href="/skemaer">
                   Skemaer
                 </Link>

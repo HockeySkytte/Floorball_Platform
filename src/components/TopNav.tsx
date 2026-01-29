@@ -36,9 +36,6 @@ export default function TopNav({
             <Link className="hover:underline" href="/oevelser">
               Øvelser
             </Link>
-            <Link className="hover:underline" href="/video">
-              Video
-            </Link>
             <Link className="hover:underline" href="/skemaer">
               Skemaer
             </Link>
@@ -74,9 +71,6 @@ export default function TopNav({
                 </Link>
                 <Link className="rounded px-2 py-1 hover:bg-zinc-50" href="/oevelser">
                   Øvelser
-                </Link>
-                <Link className="rounded px-2 py-1 hover:bg-zinc-50" href="/video">
-                  Video
                 </Link>
                 <Link className="rounded px-2 py-1 hover:bg-zinc-50" href="/skemaer">
                   Skemaer
