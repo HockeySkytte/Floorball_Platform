@@ -243,6 +243,12 @@ function pointInPolygon(x: number, y: number, ring: number[][]) {
   return inside;
 }
 
+function distance2(a: { x: number; y: number }, b: { x: number; y: number }) {
+  const dx = a.x - b.x;
+  const dy = a.y - b.y;
+  return dx * dx + dy * dy;
+}
+
 function polygonToSvgPath(
   ring: number[][],
   half: "left" | "right"
@@ -293,18 +299,20 @@ function ShotMarker({
   x,
   y,
   color,
+  selected,
 }: {
   kind: ShotKind;
   x: number;
   y: number;
   color: string;
+  selected?: boolean;
 }) {
   const cx = x * 100;
   const cy = y * 100;
   const common = {
     fill: "none",
     stroke: color,
-    strokeWidth: 2,
+    strokeWidth: selected ? 3.4 : 2,
     vectorEffect: "non-scaling-stroke" as const,
   };
 
@@ -393,6 +401,9 @@ function HalfRink({
   selectedTeam,
   flipByPeriod,
   teamColors,
+  selectedEventIds,
+  onToggleEvent,
+  onSetSelection,
 }: {
   title: string;
   half: "left" | "right";
@@ -400,6 +411,9 @@ function HalfRink({
   selectedTeam: string;
   flipByPeriod: Map<number, boolean>;
   teamColors: Map<string, string>;
+  selectedEventIds: Set<string>;
+  onToggleEvent: (eventId: string) => void;
+  onSetSelection: (eventIds: string[], mode: "replace" | "add") => void;
 }) {
   const selected = String(selectedTeam ?? "").trim();
   const fallbackOffenseColor = "var(--brand)";
@@ -443,6 +457,73 @@ function HalfRink({
     return out;
   }, [events, half, selected, flipByPeriod, teamColors]);
 
+  const [lasso, setLasso] = useState<{
+    active: boolean;
+    points: Array<{ x: number; y: number }>;
+  }>({ active: false, points: [] });
+
+  const lassoPathD = useMemo(() => {
+    if (!lasso.active || lasso.points.length === 0) return null;
+    const d =
+      `M ${lasso.points[0]!.x} ${lasso.points[0]!.y} ` +
+      lasso.points
+        .slice(1)
+        .map((p) => `L ${p.x} ${p.y}`)
+        .join(" ");
+    return d;
+  }, [lasso.active, lasso.points]);
+
+  const svgRef = useRef<SVGSVGElement | null>(null);
+
+  function eventToViewBoxPoint(e: React.PointerEvent<SVGSVGElement>) {
+    const svg = svgRef.current;
+    if (!svg) return null;
+    const rect = svg.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / Math.max(1, rect.width)) * 100;
+    const y = ((e.clientY - rect.top) / Math.max(1, rect.height)) * 100;
+    return { x: clamp(x, 0, 100), y: clamp(y, 0, 100) };
+  }
+
+  function onPointerDown(e: React.PointerEvent<SVGSVGElement>) {
+    // Only start lasso if user clicks on empty canvas (not a marker).
+    const target = e.target as Element | null;
+    if (target && typeof target.closest === "function" && target.closest("[data-event-id]")) return;
+
+    if (e.button !== 0) return;
+    const p = eventToViewBoxPoint(e);
+    if (!p) return;
+    (e.currentTarget as SVGSVGElement).setPointerCapture(e.pointerId);
+    setLasso({ active: true, points: [p] });
+  }
+
+  function onPointerMove(e: React.PointerEvent<SVGSVGElement>) {
+    if (!lasso.active) return;
+    const p = eventToViewBoxPoint(e);
+    if (!p) return;
+    setLasso((cur) => {
+      if (!cur.active) return cur;
+      const last = cur.points[cur.points.length - 1];
+      if (last && distance2(last, p) < 0.8 * 0.8) return cur;
+      return { active: true, points: [...cur.points, p] };
+    });
+  }
+
+  function finishLasso(e: React.PointerEvent<SVGSVGElement>) {
+    if (!lasso.active) return;
+    const pts = lasso.points;
+    setLasso({ active: false, points: [] });
+
+    if (pts.length < 3) return;
+
+    const ring = pts.map((p) => [p.x, p.y]);
+    const selectedIds = points
+      .filter((p) => pointInPolygon(p.x * 100, p.y * 100, ring))
+      .map((p) => p.id);
+
+    const mode: "replace" | "add" = e.shiftKey ? "add" : "replace";
+    onSetSelection(selectedIds, mode);
+  }
+
   return (
     <div className="space-y-2">
       <div className="text-center text-base font-semibold text-zinc-600">{title}</div>
@@ -454,9 +535,44 @@ function HalfRink({
             className="absolute inset-0 h-full w-full object-cover"
             style={{ objectPosition: half === "left" ? "left center" : "right center" }}
           />
-          <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+          <svg
+            ref={svgRef}
+            className="absolute inset-0 h-full w-full"
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={finishLasso}
+            onPointerCancel={() => setLasso({ active: false, points: [] })}
+          >
+            {lassoPathD ? (
+              <path
+                d={lassoPathD}
+                fill="none"
+                stroke="rgba(250,204,21,.95)"
+                strokeWidth={1.5}
+                vectorEffect="non-scaling-stroke"
+              />
+            ) : null}
+
             {points.map((p) => (
-              <ShotMarker key={p.id} kind={p.kind} x={p.x} y={p.y} color={p.color} />
+              <g
+                key={p.id}
+                data-event-id={p.id}
+                className="cursor-pointer"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleEvent(p.id);
+                }}
+              >
+                <ShotMarker
+                  kind={p.kind}
+                  x={p.x}
+                  y={p.y}
+                  color={p.color}
+                  selected={selectedEventIds.has(p.id)}
+                />
+              </g>
             ))}
           </svg>
         </div>
@@ -551,6 +667,7 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
   const [tablesTab, setTablesTab] = useState<TablesTabKey>("players-individual");
 
   const [selectedZoneCode, setSelectedZoneCode] = useState<string | null>(null);
+  const [selectedShotEventIds, setSelectedShotEventIds] = useState<string[]>([]);
   const [zones, setZones] = useState<ZoneFeature[] | null>(null);
   const [zonesError, setZonesError] = useState<string | null>(null);
 
@@ -738,6 +855,26 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
 
   const selectedTeam = String(filters.perspektiv ?? "").trim();
 
+  const selectedShotEventIdSet = useMemo(() => new Set(selectedShotEventIds), [selectedShotEventIds]);
+
+  function toggleShotEvent(eventId: string) {
+    setSelectedShotEventIds((cur) => {
+      const set = new Set(cur);
+      if (set.has(eventId)) set.delete(eventId);
+      else set.add(eventId);
+      return Array.from(set);
+    });
+  }
+
+  function setShotSelection(eventIds: string[], mode: "replace" | "add") {
+    setSelectedShotEventIds((cur) => {
+      if (mode === "replace") return Array.from(new Set(eventIds));
+      const set = new Set(cur);
+      for (const id of eventIds) set.add(id);
+      return Array.from(set);
+    });
+  }
+
   const tableEvents = useMemo(() => {
     // Base for tabeller: apply filter selections like game/strength/goalie/on-ice.
     // We intentionally do NOT require coordinates for tables.
@@ -784,6 +921,33 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
     return map;
   }, [players]);
 
+  const gpByName = useMemo(() => {
+    // GP = unique games per player from Players CSV data.
+    const byName = new Map<string, Set<string>>();
+    for (const p of players) {
+      const name = String(p.name ?? "").trim();
+      if (!name) continue;
+      if (selectedTeam && String(p.teamName ?? "").trim() !== selectedTeam) continue;
+      const gid = String(p.gameId ?? "").trim();
+      if (!gid) continue;
+      if (!byName.has(name)) byName.set(name, new Set());
+      byName.get(name)!.add(gid);
+    }
+    const out = new Map<string, number>();
+    for (const [name, set] of byName.entries()) out.set(name, set.size);
+    return out;
+  }, [players, selectedTeam]);
+
+  const selectedTeamPlayerNames = useMemo(() => {
+    const names = new Set<string>();
+    for (const p of players) {
+      if (selectedTeam && String(p.teamName ?? "").trim() !== selectedTeam) continue;
+      const name = String(p.name ?? "").trim();
+      if (name) names.add(name);
+    }
+    return names;
+  }, [players, selectedTeam]);
+
   const playerIndividualRows = useMemo(() => {
     if (!selectedTeam) return [];
 
@@ -793,11 +957,12 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
         name: string;
         number: number | null;
         line: string | null;
+        gp: number;
         g: number;
         a: number;
         sog: number;
         miss: number;
-        block: number;
+        blocks: number;
         attempts: number;
       }
     >();
@@ -805,7 +970,18 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
     const ensure = (name: string) => {
       const meta = playerMetaByName.get(name) ?? { number: null, line: null };
       if (!byName.has(name)) {
-        byName.set(name, { name, number: meta.number, line: meta.line, g: 0, a: 0, sog: 0, miss: 0, block: 0, attempts: 0 });
+        byName.set(name, {
+          name,
+          number: meta.number,
+          line: meta.line,
+          gp: gpByName.get(name) ?? 0,
+          g: 0,
+          a: 0,
+          sog: 0,
+          miss: 0,
+          blocks: 0,
+          attempts: 0,
+        });
       }
       return byName.get(name)!;
     };
@@ -815,7 +991,18 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
       if (kind === "PENALTY") continue;
 
       const forTeam = String(e.teamName ?? "").trim() === selectedTeam;
-      if (!forTeam) continue;
+      // Individual offensive stats tracked for the selected team.
+      if (!forTeam) {
+        // Blocks are counted as BLOCK events where the player is P2.
+        if (kind === "BLOCK") {
+          const blocker = String(e.p2Name ?? "").trim();
+          if (blocker && selectedTeamPlayerNames.has(blocker)) {
+            const row = ensure(blocker);
+            row.blocks += 1;
+          }
+        }
+        continue;
+      }
 
       const shooter = String(e.p1Name ?? "").trim();
       const assist = String(e.p2Name ?? "").trim();
@@ -826,7 +1013,6 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
         if (kind === "GOAL") row.g += 1;
         if (kind === "GOAL" || kind === "SHOT") row.sog += 1;
         if (kind === "MISS") row.miss += 1;
-        if (kind === "BLOCK") row.block += 1;
       }
 
       if (kind === "GOAL" && assist && assist !== shooter) {
@@ -838,7 +1024,7 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
     const rows = Array.from(byName.values()).map((r) => ({ ...r, p: r.g + r.a }));
     rows.sort((a, b) => (b.p - a.p) || (b.attempts - a.attempts) || a.name.localeCompare(b.name, "da-DK"));
     return rows;
-  }, [selectedTeam, playerMetaByName, tableEvents]);
+  }, [selectedTeam, gpByName, playerMetaByName, selectedTeamPlayerNames, tableEvents]);
 
   const playerOnIceRows = useMemo(() => {
     if (!selectedTeam) return [];
@@ -849,8 +1035,11 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
         name: string;
         number: number | null;
         line: string | null;
+        gp: number;
         cf: number;
         ca: number;
+        ff: number;
+        fa: number;
         sf: number;
         sa: number;
         gf: number;
@@ -861,7 +1050,20 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
     const ensure = (name: string) => {
       const meta = playerMetaByName.get(name) ?? { number: null, line: null };
       if (!byName.has(name)) {
-        byName.set(name, { name, number: meta.number, line: meta.line, cf: 0, ca: 0, sf: 0, sa: 0, gf: 0, ga: 0 });
+        byName.set(name, {
+          name,
+          number: meta.number,
+          line: meta.line,
+          gp: gpByName.get(name) ?? 0,
+          cf: 0,
+          ca: 0,
+          ff: 0,
+          fa: 0,
+          sf: 0,
+          sa: 0,
+          gf: 0,
+          ga: 0,
+        });
       }
       return byName.get(name)!;
     };
@@ -874,6 +1076,7 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
 
       const forTeam = String(e.teamName ?? "").trim() === selectedTeam;
       const isCorsi = kind === "GOAL" || kind === "SHOT" || kind === "MISS" || kind === "BLOCK";
+      const isFenwick = kind === "GOAL" || kind === "SHOT" || kind === "MISS";
       const isShotOnGoal = kind === "GOAL" || kind === "SHOT";
       const isGoal = kind === "GOAL";
 
@@ -893,6 +1096,10 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
           if (forTeam) row.cf += 1;
           else row.ca += 1;
         }
+        if (isFenwick) {
+          if (forTeam) row.ff += 1;
+          else row.fa += 1;
+        }
         if (isShotOnGoal) {
           if (forTeam) row.sf += 1;
           else row.sa += 1;
@@ -911,13 +1118,20 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
 
     const rows = Array.from(byName.values()).map((r) => {
       const cfPct = pctShare(r.cf, r.ca);
+      const ffPct = pctShare(r.ff, r.fa);
+      const sfPct = pctShare(r.sf, r.sa);
       const gfPct = pctShare(r.gf, r.ga);
-      return { ...r, cfPct, gfPct };
+
+      const svPct = r.sa > 0 ? ((r.sa - r.ga) / r.sa) * 100 : 0;
+      const shPct = r.sf > 0 ? (r.gf / r.sf) * 100 : 0;
+      const pdo = svPct + shPct;
+
+      return { ...r, cfPct, ffPct, sfPct, gfPct, svPct, shPct, pdo };
     });
 
     rows.sort((a, b) => (b.cfPct - a.cfPct) || (b.cf - a.cf) || a.name.localeCompare(b.name, "da-DK"));
     return rows;
-  }, [selectedTeam, playerMetaByName, tableEvents]);
+  }, [selectedTeam, gpByName, playerMetaByName, tableEvents]);
 
   const goalieRows = useMemo(() => {
     if (!selectedTeam) return [];
@@ -976,12 +1190,16 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
         cf: k.corsi.cf,
         ca: k.corsi.ca,
         cfPct: k.corsi.cfPct,
+        ff: k.fenwick.ff,
+        fa: k.fenwick.fa,
+        ffPct: k.fenwick.ffPct,
         sf: k.shots.sf,
         sa: k.shots.sa,
         sfPct: k.shots.sfPct,
         gf: k.goals.gf,
         ga: k.goals.ga,
         gfPct: k.goals.gfPct,
+        pdo: k.sg.pdo,
       };
     });
 
@@ -1097,8 +1315,12 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
   const shotMapKpis = useMemo(() => {
     const selectedTeam = String(filters.perspektiv ?? "").trim();
     if (!selectedTeam) return null;
-    return computeShotMapKpis(shotMapEvents, selectedTeam);
-  }, [shotMapEvents, filters.perspektiv]);
+    const base =
+      selectedShotEventIdSet.size > 0
+        ? shotMapEvents.filter((e) => selectedShotEventIdSet.has(String(e.id)))
+        : shotMapEvents;
+    return computeShotMapKpis(base, selectedTeam);
+  }, [shotMapEvents, filters.perspektiv, selectedShotEventIdSet]);
 
   const heatmap = useMemo(() => {
     const selectedTeam = String(filters.perspektiv ?? "").trim();
@@ -1453,6 +1675,9 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
                   selectedTeam={String(filters.perspektiv ?? "").trim()}
                   flipByPeriod={shotMapFlipByPeriod}
                   teamColors={teamColors}
+                  selectedEventIds={selectedShotEventIdSet}
+                  onToggleEvent={toggleShotEvent}
+                  onSetSelection={setShotSelection}
                 />
 
                 <div className="flex h-full flex-col justify-between gap-2">
@@ -1524,6 +1749,9 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
                   selectedTeam={String(filters.perspektiv ?? "").trim()}
                   flipByPeriod={shotMapFlipByPeriod}
                   teamColors={teamColors}
+                  selectedEventIds={selectedShotEventIdSet}
+                  onToggleEvent={toggleShotEvent}
+                  onSetSelection={setShotSelection}
                 />
               </div>
             )}
@@ -1695,12 +1923,13 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
                           <th className="px-2 py-2">#</th>
                           <th className="px-2 py-2">Spiller</th>
                           <th className="px-2 py-2">Kæde</th>
+                          <th className="px-2 py-2">GP</th>
                           <th className="px-2 py-2">G</th>
                           <th className="px-2 py-2">A</th>
                           <th className="px-2 py-2">P</th>
                           <th className="px-2 py-2">SOG</th>
                           <th className="px-2 py-2">Miss</th>
-                          <th className="px-2 py-2">Block</th>
+                          <th className="px-2 py-2">Blocks</th>
                           <th className="px-2 py-2">Forsøg</th>
                         </tr>
                       </thead>
@@ -1710,18 +1939,19 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
                             <td className="px-2 py-1.5 tabular-nums">{r.number ?? ""}</td>
                             <td className="px-2 py-1.5">{r.name}</td>
                             <td className="px-2 py-1.5">{r.line ?? ""}</td>
+                            <td className="px-2 py-1.5 tabular-nums">{r.gp}</td>
                             <td className="px-2 py-1.5 tabular-nums">{r.g}</td>
                             <td className="px-2 py-1.5 tabular-nums">{r.a}</td>
                             <td className="px-2 py-1.5 tabular-nums">{r.p}</td>
                             <td className="px-2 py-1.5 tabular-nums">{r.sog}</td>
                             <td className="px-2 py-1.5 tabular-nums">{r.miss}</td>
-                            <td className="px-2 py-1.5 tabular-nums">{r.block}</td>
+                            <td className="px-2 py-1.5 tabular-nums">{r.blocks}</td>
                             <td className="px-2 py-1.5 tabular-nums">{r.attempts}</td>
                           </tr>
                         ))}
                         {playerIndividualRows.length === 0 ? (
                           <tr>
-                            <td className="px-2 py-3 text-sm text-zinc-600" colSpan={10}>
+                            <td className="px-2 py-3 text-sm text-zinc-600" colSpan={11}>
                               Ingen data.
                             </td>
                           </tr>
@@ -1733,20 +1963,26 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
 
                 {tablesTab === "players-onice" ? (
                   <div className="mt-4 overflow-auto">
-                    <table className="min-w-[1000px] w-full border-collapse text-sm">
+                    <table className="min-w-[1400px] w-full border-collapse text-sm">
                       <thead className="sticky top-0 bg-[color:var(--surface)]">
                         <tr className="border-b border-[color:var(--surface-border)] text-left">
                           <th className="px-2 py-2">#</th>
                           <th className="px-2 py-2">Spiller</th>
                           <th className="px-2 py-2">Kæde</th>
+                          <th className="px-2 py-2">GP</th>
                           <th className="px-2 py-2">CF</th>
                           <th className="px-2 py-2">CA</th>
                           <th className="px-2 py-2">CF%</th>
+                          <th className="px-2 py-2">FF</th>
+                          <th className="px-2 py-2">FA</th>
+                          <th className="px-2 py-2">FF%</th>
+                          <th className="px-2 py-2">SF</th>
+                          <th className="px-2 py-2">SA</th>
+                          <th className="px-2 py-2">SF%</th>
                           <th className="px-2 py-2">GF</th>
                           <th className="px-2 py-2">GA</th>
                           <th className="px-2 py-2">GF%</th>
-                          <th className="px-2 py-2">SF</th>
-                          <th className="px-2 py-2">SA</th>
+                          <th className="px-2 py-2">PDO</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1755,19 +1991,50 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
                             <td className="px-2 py-1.5 tabular-nums">{r.number ?? ""}</td>
                             <td className="px-2 py-1.5">{r.name}</td>
                             <td className="px-2 py-1.5">{r.line ?? ""}</td>
+                            <td className="px-2 py-1.5 tabular-nums">{r.gp}</td>
                             <td className="px-2 py-1.5 tabular-nums">{r.cf}</td>
                             <td className="px-2 py-1.5 tabular-nums">{r.ca}</td>
-                            <td className="px-2 py-1.5 tabular-nums">{pct(r.cfPct)}</td>
-                            <td className="px-2 py-1.5 tabular-nums">{r.gf}</td>
-                            <td className="px-2 py-1.5 tabular-nums">{r.ga}</td>
-                            <td className="px-2 py-1.5 tabular-nums">{pct(r.gfPct)}</td>
+                            <td
+                              className="px-2 py-1.5 tabular-nums text-zinc-900"
+                              style={{ background: colorScaleRedWhiteBlue(r.cfPct, 20, 50, 80) }}
+                            >
+                              {pct(r.cfPct)}
+                            </td>
+                            <td className="px-2 py-1.5 tabular-nums">{r.ff}</td>
+                            <td className="px-2 py-1.5 tabular-nums">{r.fa}</td>
+                            <td
+                              className="px-2 py-1.5 tabular-nums text-zinc-900"
+                              style={{ background: colorScaleRedWhiteBlue(r.ffPct, 20, 50, 80) }}
+                            >
+                              {pct(r.ffPct)}
+                            </td>
                             <td className="px-2 py-1.5 tabular-nums">{r.sf}</td>
                             <td className="px-2 py-1.5 tabular-nums">{r.sa}</td>
+                            <td
+                              className="px-2 py-1.5 tabular-nums text-zinc-900"
+                              style={{ background: colorScaleRedWhiteBlue(r.sfPct, 20, 50, 80) }}
+                            >
+                              {pct(r.sfPct)}
+                            </td>
+                            <td className="px-2 py-1.5 tabular-nums">{r.gf}</td>
+                            <td className="px-2 py-1.5 tabular-nums">{r.ga}</td>
+                            <td
+                              className="px-2 py-1.5 tabular-nums text-zinc-900"
+                              style={{ background: colorScaleRedWhiteBlue(r.gfPct, 20, 50, 80) }}
+                            >
+                              {pct(r.gfPct)}
+                            </td>
+                            <td
+                              className="px-2 py-1.5 tabular-nums text-zinc-900"
+                              style={{ background: colorScaleRedWhiteBlue(r.pdo, 90, 100, 110) }}
+                            >
+                              {pct(r.pdo)}
+                            </td>
                           </tr>
                         ))}
                         {playerOnIceRows.length === 0 ? (
                           <tr>
-                            <td className="px-2 py-3 text-sm text-zinc-600" colSpan={11}>
+                            <td className="px-2 py-3 text-sm text-zinc-600" colSpan={17}>
                               Ingen data.
                             </td>
                           </tr>
@@ -1813,19 +2080,23 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
 
                 {tablesTab === "team" ? (
                   <div className="mt-4 overflow-auto">
-                    <table className="min-w-[1100px] w-full border-collapse text-sm">
+                    <table className="min-w-[1400px] w-full border-collapse text-sm">
                       <thead className="sticky top-0 bg-[color:var(--surface)]">
                         <tr className="border-b border-[color:var(--surface-border)] text-left">
                           <th className="px-2 py-2">Kamp</th>
                           <th className="px-2 py-2">CF</th>
                           <th className="px-2 py-2">CA</th>
                           <th className="px-2 py-2">CF%</th>
+                          <th className="px-2 py-2">FF</th>
+                          <th className="px-2 py-2">FA</th>
+                          <th className="px-2 py-2">FF%</th>
                           <th className="px-2 py-2">SF</th>
                           <th className="px-2 py-2">SA</th>
                           <th className="px-2 py-2">SF%</th>
                           <th className="px-2 py-2">GF</th>
                           <th className="px-2 py-2">GA</th>
                           <th className="px-2 py-2">GF%</th>
+                          <th className="px-2 py-2">PDO</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1834,18 +2105,47 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
                             <td className="px-2 py-1.5">{r.label}</td>
                             <td className="px-2 py-1.5 tabular-nums">{r.cf}</td>
                             <td className="px-2 py-1.5 tabular-nums">{r.ca}</td>
-                            <td className="px-2 py-1.5 tabular-nums">{pct(r.cfPct)}</td>
+                            <td
+                              className="px-2 py-1.5 tabular-nums text-zinc-900"
+                              style={{ background: colorScaleRedWhiteBlue(r.cfPct, 20, 50, 80) }}
+                            >
+                              {pct(r.cfPct)}
+                            </td>
+                            <td className="px-2 py-1.5 tabular-nums">{r.ff}</td>
+                            <td className="px-2 py-1.5 tabular-nums">{r.fa}</td>
+                            <td
+                              className="px-2 py-1.5 tabular-nums text-zinc-900"
+                              style={{ background: colorScaleRedWhiteBlue(r.ffPct, 20, 50, 80) }}
+                            >
+                              {pct(r.ffPct)}
+                            </td>
                             <td className="px-2 py-1.5 tabular-nums">{r.sf}</td>
                             <td className="px-2 py-1.5 tabular-nums">{r.sa}</td>
-                            <td className="px-2 py-1.5 tabular-nums">{pct(r.sfPct)}</td>
+                            <td
+                              className="px-2 py-1.5 tabular-nums text-zinc-900"
+                              style={{ background: colorScaleRedWhiteBlue(r.sfPct, 20, 50, 80) }}
+                            >
+                              {pct(r.sfPct)}
+                            </td>
                             <td className="px-2 py-1.5 tabular-nums">{r.gf}</td>
                             <td className="px-2 py-1.5 tabular-nums">{r.ga}</td>
-                            <td className="px-2 py-1.5 tabular-nums">{pct(r.gfPct)}</td>
+                            <td
+                              className="px-2 py-1.5 tabular-nums text-zinc-900"
+                              style={{ background: colorScaleRedWhiteBlue(r.gfPct, 20, 50, 80) }}
+                            >
+                              {pct(r.gfPct)}
+                            </td>
+                            <td
+                              className="px-2 py-1.5 tabular-nums text-zinc-900"
+                              style={{ background: colorScaleRedWhiteBlue(r.pdo, 90, 100, 110) }}
+                            >
+                              {pct(r.pdo)}
+                            </td>
                           </tr>
                         ))}
                         {teamByGameRows.length === 0 ? (
                           <tr>
-                            <td className="px-2 py-3 text-sm text-zinc-600" colSpan={10}>
+                            <td className="px-2 py-3 text-sm text-zinc-600" colSpan={14}>
                               Ingen data.
                             </td>
                           </tr>
