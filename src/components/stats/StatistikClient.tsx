@@ -79,6 +79,60 @@ function clamp(v: number, min: number, max: number) {
   return Math.min(max, Math.max(min, v));
 }
 
+function lerp(a: number, b: number, t: number) {
+  return a + (b - a) * t;
+}
+
+function clamp01(t: number) {
+  return clamp(t, 0, 1);
+}
+
+function hexToRgb(hex: string) {
+  const h = hex.replace("#", "").trim();
+  if (h.length === 3) {
+    const r = parseInt(h[0] + h[0], 16);
+    const g = parseInt(h[1] + h[1], 16);
+    const b = parseInt(h[2] + h[2], 16);
+    return { r, g, b };
+  }
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return { r, g, b };
+}
+
+function mixRgb(a: { r: number; g: number; b: number }, b: { r: number; g: number; b: number }, t: number) {
+  const tt = clamp01(t);
+  return {
+    r: Math.round(lerp(a.r, b.r, tt)),
+    g: Math.round(lerp(a.g, b.g, tt)),
+    b: Math.round(lerp(a.b, b.b, tt)),
+  };
+}
+
+function rgbCss(c: { r: number; g: number; b: number }) {
+  return `rgb(${c.r} ${c.g} ${c.b})`;
+}
+
+function colorScaleRedWhiteBlue(value: number, low: number, mid: number, high: number) {
+  // Requested colors: red at low, white at mid, blue at high.
+  const red = hexToRgb("#ef4444");
+  const white = hexToRgb("#ffffff");
+  const blue = hexToRgb("#3b82f6");
+
+  if (!Number.isFinite(value)) return rgbCss(white);
+  if (value <= mid) {
+    const t = (value - low) / Math.max(1e-9, mid - low);
+    return rgbCss(mixRgb(red, white, t));
+  }
+  const t = (value - mid) / Math.max(1e-9, high - mid);
+  return rgbCss(mixRgb(white, blue, t));
+}
+
+function pct(n: number) {
+  return Math.round(n * 10) / 10;
+}
+
 function ShotMarker({
   kind,
   x,
@@ -90,8 +144,8 @@ function ShotMarker({
   y: number;
   color: string;
 }) {
-  const cx = `${(x * 100).toFixed(4)}%`;
-  const cy = `${(y * 100).toFixed(4)}%`;
+  const cx = x * 100;
+  const cy = y * 100;
   const common = {
     fill: "none",
     stroke: color,
@@ -99,29 +153,80 @@ function ShotMarker({
     vectorEffect: "non-scaling-stroke" as const,
   };
 
+  // Marker sizing in viewBox units (0..100)
+  const r = 1.3;
+  const s = 2.6;
+
   switch (kind) {
     case "SHOT":
-      return <circle cx={cx} cy={cy} r={6} {...common} />;
+      return <circle cx={cx} cy={cy} r={r} {...common} />;
     case "MISS":
-      return <polygon points={`${cx},${`${(y * 100 - 1.0).toFixed(4)}%`} ${`${(x * 100 - 0.8).toFixed(4)}%`},${`${(y * 100 + 0.7).toFixed(4)}%`} ${`${(x * 100 + 0.8).toFixed(4)}%`},${`${(y * 100 + 0.7).toFixed(4)}%`}`} {...common} />;
+      return (
+        <polygon
+          points={`${cx},${cy - s / 1.6} ${cx - s / 1.4},${cy + s / 2} ${cx + s / 1.4},${cy + s / 2}`}
+          {...common}
+        />
+      );
     case "BLOCK":
-      return <rect x={`calc(${cx} - 6px)`} y={`calc(${cy} - 6px)`} width={12} height={12} rx={1} {...common} />;
+      return <rect x={cx - s / 2} y={cy - s / 2} width={s} height={s} rx={0.2} {...common} />;
     case "PENALTY":
-      return <polygon points={`${cx},${`${(y * 100 - 1.0).toFixed(4)}%`} ${`${(x * 100 - 0.9).toFixed(4)}%`},${cy} ${cx},${`${(y * 100 + 1.0).toFixed(4)}%`} ${`${(x * 100 + 0.9).toFixed(4)}%`},${cy}`} {...common} />;
+      return (
+        <polygon
+          points={`${cx},${cy - s / 1.6} ${cx - s / 1.6},${cy} ${cx},${cy + s / 1.6} ${cx + s / 1.6},${cy}`}
+          {...common}
+        />
+      );
     case "GOAL":
     default:
       // 5-point star
       return (
         <path
-          d={
-            `M 0,-7 L 2,-2 L 7,-2 L 3,1 L 4,6 L 0,3 L -4,6 L -3,1 L -7,-2 L -2,-2 Z`
-          }
-          transform={`translate(${cx.replace("%", "")}, ${cy.replace("%", "")})`}
-          transform-origin={`${cx} ${cy}`}
+          d={`M 0,-2.6 L 0.8,-0.8 L 2.6,-0.8 L 1.1,0.3 L 1.6,2.2 L 0,1.1 L -1.6,2.2 L -1.1,0.3 L -2.6,-0.8 L -0.8,-0.8 Z`}
+          transform={`translate(${cx} ${cy})`}
           {...common}
         />
       );
   }
+}
+
+function KpiCard({
+  title,
+  leftLabel,
+  midLabel,
+  rightLabel,
+  leftValue,
+  midValue,
+  rightValue,
+  midBg,
+}: {
+  title: string;
+  leftLabel: string;
+  midLabel: string;
+  rightLabel: string;
+  leftValue: string;
+  midValue: string;
+  rightValue: string;
+  midBg: string;
+}) {
+  return (
+    <div className="rounded-md border border-[color:var(--surface-border)] bg-[color:var(--surface)] p-4">
+      <div className="text-center text-lg font-semibold">{title}</div>
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        <div className="rounded-md border border-[color:var(--surface-border)] bg-[color:var(--surface)] p-2 text-center">
+          <div className="text-xs text-zinc-500">{leftLabel}</div>
+          <div className="mt-1 text-xl font-semibold tabular-nums">{leftValue}</div>
+        </div>
+        <div className="rounded-md border border-[color:var(--surface-border)] p-2 text-center" style={{ background: midBg }}>
+          <div className="text-xs text-zinc-700">{midLabel}</div>
+          <div className="mt-1 text-xl font-semibold tabular-nums text-zinc-900">{midValue}</div>
+        </div>
+        <div className="rounded-md border border-[color:var(--surface-border)] bg-[color:var(--surface)] p-2 text-center">
+          <div className="text-xs text-zinc-500">{rightLabel}</div>
+          <div className="mt-1 text-xl font-semibold tabular-nums">{rightValue}</div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function HalfRink({
@@ -129,11 +234,13 @@ function HalfRink({
   half,
   events,
   selectedTeam,
+  flipByPeriod,
 }: {
   title: string;
   half: "left" | "right";
   events: StatsEvent[];
   selectedTeam: string;
+  flipByPeriod: Map<number, boolean>;
 }) {
   const selected = String(selectedTeam ?? "").trim();
   const offenseColor = "var(--brand)";
@@ -150,7 +257,13 @@ function HalfRink({
 
     for (const e of events) {
       if (!isFiniteNumber(e.xM) || !isFiniteNumber(e.yM)) continue;
-      const p = toHalfRinkPoint(e.xM, e.yM, half);
+
+      const periodKey = e.period ?? 0;
+      const flip = flipByPeriod.get(periodKey) ?? false;
+      const xAdj = flip ? -e.xM : e.xM;
+      const yAdj = flip ? -e.yM : e.yM;
+
+      const p = toHalfRinkPoint(xAdj, yAdj, half);
       if (!p) continue;
 
       const isOffense = String(e.teamName ?? "").trim() === selected;
@@ -384,10 +497,7 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
 
     return events.filter((e) => {
       // Only show shot-like events on the map
-      const kind = classifyShotKind(e.event);
-      if (kind === "PENALTY" || kind === "BLOCK" || kind === "MISS" || kind === "SHOT" || kind === "GOAL") {
-        // ok
-      }
+      void classifyShotKind(e.event);
 
       if (gameSel && norm(e.gameId) !== gameSel) return false;
       if (goalieSel && norm(e.goalieName) !== goalieSel) return false;
@@ -409,6 +519,90 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
       return true;
     });
   }, [events, filters]);
+
+  const shotMapFlipByPeriod = useMemo(() => {
+    const selectedTeam = String(filters.perspektiv ?? "").trim();
+    const sums = new Map<number, number>();
+    for (const e of shotMapEvents) {
+      if (String(e.teamName ?? "").trim() !== selectedTeam) continue;
+      const kind = classifyShotKind(e.event);
+      if (kind === "PENALTY") continue;
+      const periodKey = e.period ?? 0;
+      sums.set(periodKey, (sums.get(periodKey) ?? 0) + (e.xM ?? 0));
+    }
+
+    const flip = new Map<number, boolean>();
+    for (const [p, sumX] of sums.entries()) {
+      flip.set(p, sumX < 0);
+    }
+    return flip;
+  }, [shotMapEvents, filters.perspektiv]);
+
+  const shotMapKpis = useMemo(() => {
+    const selectedTeam = String(filters.perspektiv ?? "").trim();
+    if (!selectedTeam) return null;
+
+    const isFor = (e: StatsEvent) => String(e.teamName ?? "").trim() === selectedTeam;
+
+    let corsiFor = 0;
+    let corsiAgainst = 0;
+    let fenwickFor = 0;
+    let fenwickAgainst = 0;
+    let shotsFor = 0;
+    let shotsAgainst = 0;
+    let goalsFor = 0;
+    let goalsAgainst = 0;
+
+    for (const e of shotMapEvents) {
+      const kind = classifyShotKind(e.event);
+      if (kind === "PENALTY") continue;
+      const forTeam = isFor(e);
+
+      const isCorsi = kind === "GOAL" || kind === "SHOT" || kind === "MISS" || kind === "BLOCK";
+      const isFenwick = kind === "GOAL" || kind === "SHOT" || kind === "MISS";
+      const isShotOnGoal = kind === "GOAL" || kind === "SHOT";
+      const isGoal = kind === "GOAL";
+
+      if (isCorsi) {
+        if (forTeam) corsiFor++;
+        else corsiAgainst++;
+      }
+      if (isFenwick) {
+        if (forTeam) fenwickFor++;
+        else fenwickAgainst++;
+      }
+      if (isShotOnGoal) {
+        if (forTeam) shotsFor++;
+        else shotsAgainst++;
+      }
+      if (isGoal) {
+        if (forTeam) goalsFor++;
+        else goalsAgainst++;
+      }
+    }
+
+    const pctShare = (f: number, a: number) => {
+      const den = f + a;
+      return den > 0 ? (f / den) * 100 : 0;
+    };
+
+    const cfPct = pctShare(corsiFor, corsiAgainst);
+    const ffPct = pctShare(fenwickFor, fenwickAgainst);
+    const sfPct = pctShare(shotsFor, shotsAgainst);
+    const gfPct = pctShare(goalsFor, goalsAgainst);
+
+    const svPct = shotsAgainst > 0 ? ((shotsAgainst - goalsAgainst) / shotsAgainst) * 100 : 0;
+    const shPct = shotsFor > 0 ? (goalsFor / shotsFor) * 100 : 0;
+    const pdo = svPct + shPct;
+
+    return {
+      corsi: { ca: corsiAgainst, cfPct, cf: corsiFor },
+      fenwick: { fa: fenwickAgainst, ffPct, ff: fenwickFor },
+      shots: { sa: shotsAgainst, sfPct, sf: shotsFor },
+      goals: { ga: goalsAgainst, gfPct, gf: goalsFor },
+      sg: { svPct, pdo, shPct },
+    };
+  }, [shotMapEvents, filters.perspektiv]);
 
   return (
     <div className="space-y-6">
@@ -662,18 +856,78 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
             ) : shotMapEvents.length === 0 ? (
               <p className="mt-4 text-sm text-zinc-600">Ingen events.</p>
             ) : (
-              <div className="mt-4 grid gap-4 md:grid-cols-[1fr_1fr]">
+              <div className="mt-4 grid gap-4 md:grid-cols-[1fr_280px_1fr] md:items-start">
                 <HalfRink
                   title="Defensive End"
                   half="left"
                   events={shotMapEvents}
                   selectedTeam={String(filters.perspektiv ?? "").trim()}
+                  flipByPeriod={shotMapFlipByPeriod}
                 />
+
+                <div className="space-y-3">
+                  {shotMapKpis ? (
+                    <>
+                      <KpiCard
+                        title="Corsi"
+                        leftLabel="CA"
+                        midLabel="CF%"
+                        rightLabel="CF"
+                        leftValue={String(shotMapKpis.corsi.ca)}
+                        midValue={String(pct(shotMapKpis.corsi.cfPct))}
+                        rightValue={String(shotMapKpis.corsi.cf)}
+                        midBg={colorScaleRedWhiteBlue(shotMapKpis.corsi.cfPct, 20, 50, 80)}
+                      />
+                      <KpiCard
+                        title="Fenwick"
+                        leftLabel="FA"
+                        midLabel="FF%"
+                        rightLabel="FF"
+                        leftValue={String(shotMapKpis.fenwick.fa)}
+                        midValue={String(pct(shotMapKpis.fenwick.ffPct))}
+                        rightValue={String(shotMapKpis.fenwick.ff)}
+                        midBg={colorScaleRedWhiteBlue(shotMapKpis.fenwick.ffPct, 20, 50, 80)}
+                      />
+                      <KpiCard
+                        title="Shots"
+                        leftLabel="SA"
+                        midLabel="SF%"
+                        rightLabel="SF"
+                        leftValue={String(shotMapKpis.shots.sa)}
+                        midValue={String(pct(shotMapKpis.shots.sfPct))}
+                        rightValue={String(shotMapKpis.shots.sf)}
+                        midBg={colorScaleRedWhiteBlue(shotMapKpis.shots.sfPct, 20, 50, 80)}
+                      />
+                      <KpiCard
+                        title="Goals"
+                        leftLabel="GA"
+                        midLabel="GF%"
+                        rightLabel="GF"
+                        leftValue={String(shotMapKpis.goals.ga)}
+                        midValue={String(pct(shotMapKpis.goals.gfPct))}
+                        rightValue={String(shotMapKpis.goals.gf)}
+                        midBg={colorScaleRedWhiteBlue(shotMapKpis.goals.gfPct, 20, 50, 80)}
+                      />
+                      <KpiCard
+                        title="Shooting / Goaltending"
+                        leftLabel="Sv%"
+                        midLabel="PDO"
+                        rightLabel="Sh%"
+                        leftValue={String(pct(shotMapKpis.sg.svPct))}
+                        midValue={String(pct(shotMapKpis.sg.pdo))}
+                        rightValue={String(pct(shotMapKpis.sg.shPct))}
+                        midBg={colorScaleRedWhiteBlue(shotMapKpis.sg.pdo, 90, 100, 110)}
+                      />
+                    </>
+                  ) : null}
+                </div>
+
                 <HalfRink
                   title="Offensive End"
                   half="right"
                   events={shotMapEvents}
                   selectedTeam={String(filters.perspektiv ?? "").trim()}
+                  flipByPeriod={shotMapFlipByPeriod}
                 />
               </div>
             )}
