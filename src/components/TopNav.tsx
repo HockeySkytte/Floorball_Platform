@@ -10,10 +10,8 @@ export type TopNavUser = {
 
 export default function TopNav({
   user,
-  logoUrl,
 }: {
   user: TopNavUser | null;
-  logoUrl?: string | null;
 }) {
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -24,19 +22,6 @@ export default function TopNav({
     <header className="border-b border-[color:var(--brand)] bg-[color:var(--topbar-bg)] text-[color:var(--topbar-foreground)]">
       <div className="flex w-full items-center justify-between px-4 py-2">
         <div className="flex items-center gap-4">
-          {logoUrl ? (
-            <Link href="/statistik" className="shrink-0">
-              <img
-                src={logoUrl}
-                alt="Logo"
-                className="h-16 w-16 object-contain"
-                onError={(e) => {
-                  (e.currentTarget as HTMLImageElement).style.display = "none";
-                }}
-              />
-            </Link>
-          ) : null}
-
           {/* Desktop navigation */}
           <nav className="hidden items-center gap-5 text-base sm:flex">
             <Link className="hover:underline" href="/statistik">

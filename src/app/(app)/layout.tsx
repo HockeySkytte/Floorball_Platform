@@ -45,15 +45,16 @@ export default async function AppLayout({
       <div className="grid min-h-dvh w-full grid-cols-1 md:grid-cols-[280px_1fr]">
         {/* Desktop: left slicer pane */}
         <aside className="hidden min-h-dvh flex-col bg-[image:var(--sidebar-gradient)] bg-cover bg-no-repeat p-4 text-[var(--brand-foreground)] md:flex">
-          <Link className="flex items-center gap-3 text-xl font-semibold tracking-tight" href="/statistik">
+          <Link className="flex items-center" href="/statistik" aria-label="Statistik">
             {selectedTeamLogoUrl ? (
               <img
                 src={selectedTeamLogoUrl}
                 alt="Logo"
-                className="h-9 w-9 rounded-md object-contain"
+                className="h-16 w-16 object-contain"
               />
-            ) : null}
-            <span>Floorball</span>
+            ) : (
+              <span className="text-xl font-semibold tracking-tight">Floorball</span>
+            )}
           </Link>
           <div className="mt-4">
             <TeamSlicer
@@ -70,7 +71,6 @@ export default async function AppLayout({
           <div className="hidden md:block">
             <TopNav
               user={{ username: user.username, isAdmin, teamRole: user.activeRole }}
-              logoUrl={selectedTeamLogoUrl}
             />
           </div>
 

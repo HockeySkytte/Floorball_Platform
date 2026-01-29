@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+
+    // Repo-only helpers & artifacts (not app/runtime code):
+    "scripts/**",
+    "Testdata/**",
   ]),
 ]);
 
