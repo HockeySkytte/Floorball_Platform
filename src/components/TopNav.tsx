@@ -27,8 +27,11 @@ export default function TopNav({
             <Link className="hover:underline" href="/statistik">
               Statistik
             </Link>
-            <Link className="hover:underline" href="/test">
-              Test
+            <Link className="hover:underline" href="/taktiktavle">
+              Taktiktavle
+            </Link>
+            <Link className="hover:underline" href="/kampe">
+              Kampe
             </Link>
             <Link className="hover:underline" href="/playbook">
               Playbook
@@ -36,8 +39,8 @@ export default function TopNav({
             <Link className="hover:underline" href="/oevelser">
               Øvelser
             </Link>
-            <Link className="hover:underline" href="/skemaer">
-              Skemaer
+            <Link className="hover:underline" href="/spiller">
+              Spiller
             </Link>
 
             {user?.isAdmin ? (
@@ -63,8 +66,11 @@ export default function TopNav({
                 <Link className="rounded px-2 py-1 hover:bg-zinc-50" href="/statistik">
                   Statistik
                 </Link>
-                <Link className="rounded px-2 py-1 hover:bg-zinc-50" href="/test">
-                  Test
+                <Link className="rounded px-2 py-1 hover:bg-zinc-50" href="/taktiktavle">
+                  Taktiktavle
+                </Link>
+                <Link className="rounded px-2 py-1 hover:bg-zinc-50" href="/kampe">
+                  Kampe
                 </Link>
                 <Link className="rounded px-2 py-1 hover:bg-zinc-50" href="/playbook">
                   Playbook
@@ -72,8 +78,8 @@ export default function TopNav({
                 <Link className="rounded px-2 py-1 hover:bg-zinc-50" href="/oevelser">
                   Øvelser
                 </Link>
-                <Link className="rounded px-2 py-1 hover:bg-zinc-50" href="/skemaer">
-                  Skemaer
+                <Link className="rounded px-2 py-1 hover:bg-zinc-50" href="/spiller">
+                  Spiller
                 </Link>
 
                 {user?.isAdmin ? (

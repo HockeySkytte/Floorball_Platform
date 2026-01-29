@@ -100,8 +100,11 @@ export default function MobileAppHeader({
                 <Link className="block px-4 py-4 text-lg font-semibold" href="/statistik">
                   Statistik
                 </Link>
-                <Link className="block px-4 py-4 text-lg font-semibold" href="/test">
-                  Test
+                <Link className="block px-4 py-4 text-lg font-semibold" href="/taktiktavle">
+                  Taktiktavle
+                </Link>
+                <Link className="block px-4 py-4 text-lg font-semibold" href="/kampe">
+                  Kampe
                 </Link>
                 <Link className="block px-4 py-4 text-lg font-semibold" href="/playbook">
                   Playbook
@@ -109,8 +112,8 @@ export default function MobileAppHeader({
                 <Link className="block px-4 py-4 text-lg font-semibold" href="/oevelser">
                   Øvelser
                 </Link>
-                <Link className="block px-4 py-4 text-lg font-semibold" href="/skemaer">
-                  Skemaer
+                <Link className="block px-4 py-4 text-lg font-semibold" href="/spiller">
+                  Spiller
                 </Link>
                 {isAdmin ? (
                   <Link className="block px-4 py-4 text-lg font-semibold" href="/admin">

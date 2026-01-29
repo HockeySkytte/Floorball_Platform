@@ -140,6 +140,29 @@ function rgbCss(c: { r: number; g: number; b: number }) {
   return `rgb(${c.r} ${c.g} ${c.b})`;
 }
 
+function textColorForRgbBg(bg: string) {
+  // Expects `rgb(r g b)` from rgbCss(). Falls back to dark text.
+  const m = /rgb\(\s*(\d+)\s+(\d+)\s+(\d+)\s*\)/.exec(bg);
+  if (!m) return "rgb(9 9 11)"; // zinc-950
+  const r = Number(m[1]);
+  const g = Number(m[2]);
+  const b = Number(m[3]);
+  // Relative luminance (sRGB), simple threshold works well for these scales.
+  const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  return lum < 0.6 ? "rgb(255 255 255)" : "rgb(9 9 11)";
+}
+
+function Pill({ value, bg }: { value: React.ReactNode; bg: string }) {
+  return (
+    <span
+      className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums"
+      style={{ background: bg, color: textColorForRgbBg(bg) }}
+    >
+      {value}
+    </span>
+  );
+}
+
 function colorScaleRedWhiteBlue(value: number, low: number, mid: number, high: number) {
   // Requested colors: red at low, white at mid, blue at high.
   const red = hexToRgb("#ef4444");
@@ -795,8 +818,13 @@ function SortableTable<T>({
   }, [rows, columns, sortKey, sortDir]);
 
   return (
-    <div className="overflow-auto">
-      <table className={(minWidthClass ?? "") + " w-full border-collapse text-sm"}>
+    <div className="w-full max-w-full overflow-x-auto overscroll-x-contain">
+      <table
+        className={
+          (minWidthClass ?? "") +
+          " w-full border-collapse text-[13px] leading-5 text-[color:var(--surface-foreground)]"
+        }
+      >
         <thead className="sticky top-0 z-10 bg-[color:var(--surface)]">
           <tr className="border-b border-[color:var(--surface-border)]">
             {columns.map((c) => {
@@ -807,13 +835,13 @@ function SortableTable<T>({
                 <th
                   key={c.key}
                   className={
-                    "px-2 py-2 font-semibold " +
+                    "px-2 py-1.5 font-semibold " +
                     (align === "left" ? "text-left" : "text-center")
                   }
                 >
                   <button
                     type="button"
-                    className="inline-flex items-center gap-1"
+                    className="inline-flex items-center gap-1 whitespace-nowrap"
                     onClick={() => {
                       if (c.key === "__rank") {
                         setSortKey(defaultSortKey);
@@ -846,7 +874,7 @@ function SortableTable<T>({
                     <td
                       key={c.key}
                       className={
-                        "px-2 py-1.5 tabular-nums " +
+                        "px-2 py-1 tabular-nums whitespace-nowrap " +
                         (align === "left" ? "text-left" : "text-center")
                       }
                     >
@@ -861,7 +889,7 @@ function SortableTable<T>({
                   <td
                     key={c.key}
                     className={
-                      "px-2 py-1.5 " +
+                      "px-2 py-1 whitespace-nowrap " +
                       (isNum ? "tabular-nums " : "") +
                       (align === "left" ? "text-left" : "text-center")
                     }
@@ -2521,7 +2549,7 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
                   getRowKey={(r) => `${r.team}||${r.name}`}
                   defaultSortKey="p"
                   defaultSortDir="desc"
-                  minWidthClass="min-w-[1200px]"
+                  minWidthClass="min-w-[980px]"
                   columns={[
                     { key: "__rank", label: "Rank", getValue: () => 0 },
                     { key: "name", label: "Navn", align: "left", getValue: (r) => r.name },
@@ -2549,7 +2577,7 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
                   getRowKey={(r) => `${r.team}||${r.name}`}
                   defaultSortKey="cfPct"
                   defaultSortDir="desc"
-                  minWidthClass="min-w-[1600px]"
+                  minWidthClass="min-w-[1180px]"
                   columns={[
                     { key: "__rank", label: "Rank", getValue: () => 0 },
                     { key: "name", label: "Spiller", align: "left", getValue: (r) => r.name },
@@ -2561,8 +2589,9 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
                       key: "cfPct",
                       label: "CF%",
                       getValue: (r) => r.cfPct,
-                      format: (r) => pct(r.cfPct),
-                      style: (r) => ({ background: colorScaleRedWhiteBlue(r.cfPct, 20, 50, 80) }),
+                      format: (r) => (
+                        <Pill value={pct(r.cfPct)} bg={colorScaleRedWhiteBlue(r.cfPct, 20, 50, 80)} />
+                      ),
                     },
                     { key: "ff", label: "FF", getValue: (r) => r.ff },
                     { key: "fa", label: "FA", getValue: (r) => r.fa },
@@ -2570,8 +2599,9 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
                       key: "ffPct",
                       label: "FF%",
                       getValue: (r) => r.ffPct,
-                      format: (r) => pct(r.ffPct),
-                      style: (r) => ({ background: colorScaleRedWhiteBlue(r.ffPct, 20, 50, 80) }),
+                      format: (r) => (
+                        <Pill value={pct(r.ffPct)} bg={colorScaleRedWhiteBlue(r.ffPct, 20, 50, 80)} />
+                      ),
                     },
                     { key: "sf", label: "SF", getValue: (r) => r.sf },
                     { key: "sa", label: "SA", getValue: (r) => r.sa },
@@ -2579,8 +2609,9 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
                       key: "sfPct",
                       label: "SF%",
                       getValue: (r) => r.sfPct,
-                      format: (r) => pct(r.sfPct),
-                      style: (r) => ({ background: colorScaleRedWhiteBlue(r.sfPct, 20, 50, 80) }),
+                      format: (r) => (
+                        <Pill value={pct(r.sfPct)} bg={colorScaleRedWhiteBlue(r.sfPct, 20, 50, 80)} />
+                      ),
                     },
                     { key: "gf", label: "GF", getValue: (r) => r.gf },
                     { key: "ga", label: "GA", getValue: (r) => r.ga },
@@ -2588,8 +2619,9 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
                       key: "gfPct",
                       label: "GF%",
                       getValue: (r) => r.gfPct,
-                      format: (r) => pct(r.gfPct),
-                      style: (r) => ({ background: colorScaleRedWhiteBlue(r.gfPct, 20, 50, 80) }),
+                      format: (r) => (
+                        <Pill value={pct(r.gfPct)} bg={colorScaleRedWhiteBlue(r.gfPct, 20, 50, 80)} />
+                      ),
                     },
                     { key: "shPct", label: "Sh%", getValue: (r) => r.shPct, format: (r) => pct(r.shPct) },
                     { key: "svPct", label: "Sv%", getValue: (r) => r.svPct, format: (r) => pct(r.svPct) },
@@ -2597,8 +2629,9 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
                       key: "pdo",
                       label: "PDO",
                       getValue: (r) => r.pdo,
-                      format: (r) => pct(r.pdo),
-                      style: (r) => ({ background: colorScaleRedWhiteBlue(r.pdo, 90, 100, 110) }),
+                      format: (r) => (
+                        <Pill value={pct(r.pdo)} bg={colorScaleRedWhiteBlue(r.pdo, 90, 100, 110)} />
+                      ),
                     },
                   ]}
                 />
@@ -2612,7 +2645,7 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
                   getRowKey={(r) => `${r.team}||${r.name}`}
                   defaultSortKey="svPct"
                   defaultSortDir="desc"
-                  minWidthClass="min-w-[900px]"
+                  minWidthClass="min-w-[640px]"
                   columns={[
                     { key: "__rank", label: "Rank", getValue: () => 0 },
                     { key: "name", label: "Målmand", align: "left", getValue: (r) => r.name },
@@ -2633,7 +2666,7 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
                   getRowKey={(r) => r.team}
                   defaultSortKey="cfPct"
                   defaultSortDir="desc"
-                  minWidthClass="min-w-[1600px]"
+                  minWidthClass="min-w-[1180px]"
                   columns={[
                     { key: "__rank", label: "Rank", getValue: () => 0 },
                     { key: "team", label: "Hold", align: "left", getValue: (r) => r.team },
@@ -2643,8 +2676,9 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
                       key: "cfPct",
                       label: "CF%",
                       getValue: (r) => r.cfPct,
-                      format: (r) => pct(r.cfPct),
-                      style: (r) => ({ background: colorScaleRedWhiteBlue(r.cfPct, 20, 50, 80) }),
+                      format: (r) => (
+                        <Pill value={pct(r.cfPct)} bg={colorScaleRedWhiteBlue(r.cfPct, 20, 50, 80)} />
+                      ),
                     },
                     { key: "ff", label: "FF", getValue: (r) => r.ff },
                     { key: "fa", label: "FA", getValue: (r) => r.fa },
@@ -2652,8 +2686,9 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
                       key: "ffPct",
                       label: "FF%",
                       getValue: (r) => r.ffPct,
-                      format: (r) => pct(r.ffPct),
-                      style: (r) => ({ background: colorScaleRedWhiteBlue(r.ffPct, 20, 50, 80) }),
+                      format: (r) => (
+                        <Pill value={pct(r.ffPct)} bg={colorScaleRedWhiteBlue(r.ffPct, 20, 50, 80)} />
+                      ),
                     },
                     { key: "sf", label: "SF", getValue: (r) => r.sf },
                     { key: "sa", label: "SA", getValue: (r) => r.sa },
@@ -2661,8 +2696,9 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
                       key: "sfPct",
                       label: "SF%",
                       getValue: (r) => r.sfPct,
-                      format: (r) => pct(r.sfPct),
-                      style: (r) => ({ background: colorScaleRedWhiteBlue(r.sfPct, 20, 50, 80) }),
+                      format: (r) => (
+                        <Pill value={pct(r.sfPct)} bg={colorScaleRedWhiteBlue(r.sfPct, 20, 50, 80)} />
+                      ),
                     },
                     { key: "gf", label: "GF", getValue: (r) => r.gf },
                     { key: "ga", label: "GA", getValue: (r) => r.ga },
@@ -2670,8 +2706,9 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
                       key: "gfPct",
                       label: "GF%",
                       getValue: (r) => r.gfPct,
-                      format: (r) => pct(r.gfPct),
-                      style: (r) => ({ background: colorScaleRedWhiteBlue(r.gfPct, 20, 50, 80) }),
+                      format: (r) => (
+                        <Pill value={pct(r.gfPct)} bg={colorScaleRedWhiteBlue(r.gfPct, 20, 50, 80)} />
+                      ),
                     },
                     { key: "shPct", label: "Sh%", getValue: (r) => r.shPct, format: (r) => pct(r.shPct) },
                     { key: "svPct", label: "Sv%", getValue: (r) => r.svPct, format: (r) => pct(r.svPct) },
@@ -2679,8 +2716,9 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
                       key: "pdo",
                       label: "PDO",
                       getValue: (r) => r.pdo,
-                      format: (r) => pct(r.pdo),
-                      style: (r) => ({ background: colorScaleRedWhiteBlue(r.pdo, 90, 100, 110) }),
+                      format: (r) => (
+                        <Pill value={pct(r.pdo)} bg={colorScaleRedWhiteBlue(r.pdo, 90, 100, 110)} />
+                      ),
                     },
                   ]}
                 />
