@@ -8,11 +8,13 @@ function ToolButton({
   activeTool,
   setTool,
   label,
+  icon,
 }: {
   tool: TaktikTool;
   activeTool: TaktikTool;
   setTool: (t: TaktikTool) => void;
   label: string;
+  icon?: React.ReactNode;
 }) {
   const active = activeTool === tool;
   return (
@@ -24,8 +26,74 @@ function ToolButton({
         (active ? "bg-white/15" : "hover:bg-white/10")
       }
     >
-      {label}
+      <span className="flex items-center gap-2">
+        {icon ? <span className="grid h-6 w-10 place-items-center rounded bg-white/10">{icon}</span> : null}
+        <span className="min-w-0 truncate">{label}</span>
+      </span>
     </button>
+  );
+}
+
+function LineIcon({ dashed, wavy, arrow }: { dashed?: boolean; wavy?: boolean; arrow?: boolean }) {
+  const dash = dashed ? "4 4" : undefined;
+  return (
+    <svg width="34" height="16" viewBox="0 0 34 16" aria-hidden="true">
+      {wavy ? (
+        <path
+          d="M2 8 C 7 2, 11 14, 16 8 S 25 2, 32 8"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+        />
+      ) : (
+        <line
+          x1="2"
+          y1="8"
+          x2="30"
+          y2="8"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeDasharray={dash}
+        />
+      )}
+      {arrow ? (
+        <path d="M30 8 L24 5 M30 8 L24 11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      ) : null}
+    </svg>
+  );
+}
+
+function AccessoryIcon({ type }: { type: "player" | "cone" | "ball" | "text" }) {
+  if (type === "player") {
+    return (
+      <svg width="34" height="16" viewBox="0 0 34 16" aria-hidden="true">
+        <circle cx="17" cy="8" r="5" fill="currentColor" opacity="0.9" />
+      </svg>
+    );
+  }
+  if (type === "cone") {
+    return (
+      <svg width="34" height="16" viewBox="0 0 34 16" aria-hidden="true">
+        <path d="M17 2 L11 14 H23 Z" fill="currentColor" opacity="0.9" />
+      </svg>
+    );
+  }
+  if (type === "ball") {
+    return (
+      <svg width="34" height="16" viewBox="0 0 34 16" aria-hidden="true">
+        <circle cx="17" cy="8" r="4" fill="none" stroke="currentColor" strokeWidth="2" />
+        <circle cx="17" cy="8" r="1.5" fill="currentColor" />
+      </svg>
+    );
+  }
+  return (
+    <svg width="34" height="16" viewBox="0 0 34 16" aria-hidden="true">
+      <text x="11" y="12" fontSize="12" fontFamily="ui-sans-serif, system-ui" fill="currentColor">
+        T
+      </text>
+    </svg>
   );
 }
 
@@ -41,7 +109,7 @@ export default function TaktiktavleSidebar() {
       <div>
         <div className="text-xs font-extrabold tracking-wide opacity-90">VÆRKTØJ</div>
         <div className="mt-2 space-y-1">
-          <ToolButton tool="select" activeTool={tool} setTool={setTool} label="Marker" />
+          <ToolButton tool="select" activeTool={tool} setTool={setTool} label="Marker / Flyt" />
           <ToolButton tool="eraser" activeTool={tool} setTool={setTool} label="Slet (klik)" />
         </div>
       </div>
@@ -49,17 +117,82 @@ export default function TaktiktavleSidebar() {
       <div>
         <div className="text-xs font-extrabold tracking-wide opacity-90">LINJER</div>
         <div className="mt-2 space-y-1">
-          <ToolButton tool="line" activeTool={tool} setTool={setTool} label="Linje" />
-          <ToolButton tool="arrow" activeTool={tool} setTool={setTool} label="Pil" />
+          <ToolButton
+            tool="line-solid"
+            activeTool={tool}
+            setTool={setTool}
+            label="Solid"
+            icon={<LineIcon />}
+          />
+          <ToolButton
+            tool="line-dashed"
+            activeTool={tool}
+            setTool={setTool}
+            label="Stiplet"
+            icon={<LineIcon dashed />}
+          />
+          <ToolButton
+            tool="line-wavy"
+            activeTool={tool}
+            setTool={setTool}
+            label="Bølget"
+            icon={<LineIcon wavy />}
+          />
+          <ToolButton
+            tool="arrow-solid"
+            activeTool={tool}
+            setTool={setTool}
+            label="Solid + pil"
+            icon={<LineIcon arrow />}
+          />
+          <ToolButton
+            tool="arrow-dashed"
+            activeTool={tool}
+            setTool={setTool}
+            label="Stiplet + pil"
+            icon={<LineIcon dashed arrow />}
+          />
+          <ToolButton
+            tool="arrow-wavy"
+            activeTool={tool}
+            setTool={setTool}
+            label="Bølget + pil"
+            icon={<LineIcon wavy arrow />}
+          />
         </div>
       </div>
 
       <div>
         <div className="text-xs font-extrabold tracking-wide opacity-90">TILBEHØR</div>
         <div className="mt-2 space-y-1">
-          <ToolButton tool="player" activeTool={tool} setTool={setTool} label="Spiller (prik)" />
-          <ToolButton tool="cone" activeTool={tool} setTool={setTool} label="Kegle" />
-          <ToolButton tool="text" activeTool={tool} setTool={setTool} label="Tekst" />
+          <ToolButton
+            tool="player"
+            activeTool={tool}
+            setTool={setTool}
+            label="Spiller"
+            icon={<AccessoryIcon type="player" />}
+          />
+          <ToolButton
+            tool="cone"
+            activeTool={tool}
+            setTool={setTool}
+            label="Kegle"
+            icon={<AccessoryIcon type="cone" />}
+          />
+          <ToolButton
+            tool="ball"
+            activeTool={tool}
+            setTool={setTool}
+            label="Floorballbold"
+            icon={<AccessoryIcon type="ball" />}
+          />
+          <ToolButton
+            tool="text"
+            activeTool={tool}
+            setTool={setTool}
+            label="Tekst"
+            icon={<AccessoryIcon type="text" />}
+          />
         </div>
       </div>
 

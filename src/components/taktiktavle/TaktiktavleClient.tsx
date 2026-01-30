@@ -1,5 +1,9 @@
 "use client";
 
+export { default } from "./TaktiktavleEditorClient";
+
+/*
+
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTaktiktavleUi } from "@/components/taktiktavle/TaktiktavleProvider";
 
@@ -753,3 +757,5 @@ export default function TaktiktavleClient() {
     </div>
   );
 }
+
+*/

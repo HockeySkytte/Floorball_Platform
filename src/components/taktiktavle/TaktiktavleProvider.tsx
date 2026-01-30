@@ -4,12 +4,17 @@ import React, { createContext, useContext, useMemo, useState } from "react";
 
 export type TaktikTool =
   | "select"
-  | "line"
-  | "arrow"
+  | "eraser"
+  | "text"
   | "player"
   | "cone"
-  | "text"
-  | "eraser";
+  | "ball"
+  | "line-solid"
+  | "line-dashed"
+  | "line-wavy"
+  | "arrow-solid"
+  | "arrow-dashed"
+  | "arrow-wavy";
 
 type TaktiktavleUiState = {
   tool: TaktikTool;
