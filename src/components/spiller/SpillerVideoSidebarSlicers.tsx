@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useStatsFilters } from "@/components/stats/StatsFiltersProvider";
 
 type StatsEvent = {
@@ -12,31 +12,28 @@ type StatsEvent = {
   teamHome?: string | null;
   teamAway?: string | null;
   strength?: string | null;
-  p1Name: string | null;
-  p2Name: string | null;
-  goalieName?: string | null;
-  homePlayersNames?: string | null;
-  awayPlayersNames?: string | null;
+  event: string;
+  videoUrl?: string | null;
+  videoTime?: number | null;
 };
 
-function splitOnIce(value: string | null | undefined) {
-  return String(value ?? "")
-    .split(" - ")
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
-
-export default function StatsSidebarSlicers() {
+export default function SpillerVideoSidebarSlicers() {
   const pathname = usePathname();
-  const show = pathname === "/statistik" || pathname.startsWith("/statistik/");
+  const searchParams = useSearchParams();
+  const show = pathname === "/spiller" || pathname.startsWith("/spiller/");
 
-  const { filters, setPerspektiv, setKamp, setStyrke, setSpiller, setMaalmand, setPaaBanen } =
-    useStatsFilters();
+  const tab = String(searchParams.get("tab") ?? "").toLowerCase();
+  const playerMode = String(searchParams.get("mode") ?? "").toLowerCase();
+  const playerId = String(searchParams.get("playerId") ?? "").trim();
+  const isAllPlayers = tab === "video" && (playerMode === "all" || !playerId);
+
+  const { filters, setKamp, setStyrke, setEvent, setScope } = useStatsFilters();
 
   const [events, setEvents] = useState<StatsEvent[]>([]);
 
   useEffect(() => {
     if (!show) return;
+    if (tab !== "video") return;
 
     let cancelled = false;
 
@@ -45,20 +42,17 @@ export default function StatsSidebarSlicers() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) return;
       if (cancelled) return;
-      setEvents(data?.events ?? []);
+      setEvents(Array.isArray(data?.events) ? data.events : []);
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [show]);
+  }, [show, tab]);
 
   const options = useMemo(() => {
-    const perspectives = new Set<string>();
     const strengths = new Set<string>();
-    const players = new Set<string>();
-    const goalies = new Set<string>();
-    const onIce = new Set<string>();
+    const eventTypes = new Set<string>();
 
     const games = new Map<
       string,
@@ -66,18 +60,14 @@ export default function StatsSidebarSlicers() {
     >();
 
     for (const e of events) {
-      if (e.teamName) perspectives.add(e.teamName);
-      else if (e.perspective) perspectives.add(e.perspective);
+      const hasVideo =
+        Boolean(String(e.videoUrl ?? "").trim()) &&
+        typeof e.videoTime === "number" &&
+        Number.isFinite(e.videoTime);
+      if (!hasVideo) continue;
 
       if (e.strength) strengths.add(e.strength);
-
-      if (e.p1Name) players.add(e.p1Name);
-      if (e.p2Name) players.add(e.p2Name);
-
-      if (e.goalieName) goalies.add(e.goalieName);
-
-      for (const name of splitOnIce(e.homePlayersNames)) onIce.add(name);
-      for (const name of splitOnIce(e.awayPlayersNames)) onIce.add(name);
+      if (e.event) eventTypes.add(e.event);
 
       if (e.gameId) {
         const existing = games.get(e.gameId);
@@ -122,43 +112,17 @@ export default function StatsSidebarSlicers() {
       });
 
     return {
-      perspectives: Array.from(perspectives).sort(sortAlpha),
       games: gamesList,
       strengths: Array.from(strengths).sort(sortAlpha),
-      players: Array.from(players).sort(sortAlpha),
-      goalies: Array.from(goalies).sort(sortAlpha),
-      onIce: Array.from(onIce).sort(sortAlpha),
+      eventTypes: Array.from(eventTypes).sort(sortAlpha),
     };
   }, [events]);
 
-  useEffect(() => {
-    if (!show) return;
-    if (filters.perspektiv) return;
-    if (options.perspectives.length === 0) return;
-    setPerspektiv(options.perspectives[0]!);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [show, options.perspectives.length]);
-
   if (!show) return null;
+  if (tab !== "video") return null;
 
   return (
     <div className="mt-4 space-y-2.5">
-      <label className="block text-xs">
-        <div className="mb-0.5 font-semibold">Perspektiv</div>
-        <select
-          className="w-full rounded-md border border-zinc-300 bg-white px-2 py-1.5 text-xs text-zinc-900 disabled:opacity-70"
-          value={filters.perspektiv}
-          disabled={options.perspectives.length === 0}
-          onChange={(e) => setPerspektiv(e.target.value)}
-        >
-          {options.perspectives.map((v) => (
-            <option key={v} value={v}>
-              {v}
-            </option>
-          ))}
-        </select>
-      </label>
-
       <label className="block text-xs">
         <div className="mb-0.5 font-semibold">Kamp</div>
         <select
@@ -192,14 +156,14 @@ export default function StatsSidebarSlicers() {
       </label>
 
       <label className="block text-xs">
-        <div className="mb-0.5 font-semibold">Spiller</div>
+        <div className="mb-0.5 font-semibold">Event</div>
         <select
           className="w-full rounded-md border border-zinc-300 bg-white px-2 py-1.5 text-xs text-zinc-900 disabled:opacity-70"
-          value={filters.spiller}
-          onChange={(e) => setSpiller(e.target.value)}
+          value={filters.event}
+          onChange={(e) => setEvent(e.target.value)}
         >
           <option value="">Alle</option>
-          {options.players.map((v) => (
+          {options.eventTypes.map((v) => (
             <option key={v} value={v}>
               {v}
             </option>
@@ -207,40 +171,44 @@ export default function StatsSidebarSlicers() {
         </select>
       </label>
 
-      <label className="block text-xs">
-        <div className="mb-0.5 font-semibold">Målmand</div>
-        <select
-          className="w-full rounded-md border border-zinc-300 bg-white px-2 py-1.5 text-xs text-zinc-900 disabled:opacity-70"
-          value={filters.maalmand}
-          onChange={(e) => setMaalmand(e.target.value)}
-        >
-          <option value="">Alle</option>
-          {options.goalies.map((v) => (
-            <option key={v} value={v}>
-              {v}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <label className="block text-xs">
-        <div className="mb-0.5 font-semibold">På Banen</div>
-        <select
-          multiple
-          className="h-32 w-full rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900"
-          value={filters.paaBanen}
-          onChange={(e) => {
-            const values = Array.from(e.currentTarget.selectedOptions).map((o) => o.value);
-            setPaaBanen(values);
-          }}
-        >
-          {options.onIce.map((v) => (
-            <option key={v} value={v}>
-              {v}
-            </option>
-          ))}
-        </select>
-      </label>
+      <div className="block text-xs">
+        <div className="mb-1 font-semibold">Individuelt / På Banen</div>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            className={
+              "flex-1 rounded-md px-3 py-2 text-xs font-semibold " +
+              (filters.scope === "individual"
+                ? "text-[var(--brand-foreground)]"
+                : "border border-zinc-300 bg-white text-zinc-900")
+            }
+            style={filters.scope === "individual" ? { background: "var(--brand)" } : undefined}
+            disabled={isAllPlayers}
+            onClick={() => setScope(filters.scope === "individual" ? "" : "individual")}
+          >
+            Individuelt
+          </button>
+          <button
+            type="button"
+            className={
+              "flex-1 rounded-md px-3 py-2 text-xs font-semibold " +
+              (filters.scope === "onIce"
+                ? "text-[var(--brand-foreground)]"
+                : "border border-zinc-300 bg-white text-zinc-900")
+            }
+            style={filters.scope === "onIce" ? { background: "var(--brand)" } : undefined}
+            disabled={isAllPlayers}
+            onClick={() => setScope(filters.scope === "onIce" ? "" : "onIce")}
+          >
+            På Banen
+          </button>
+        </div>
+        {isAllPlayers ? (
+          <div className="mt-1 text-[11px] text-red-200/90">
+            Vælg en spiller for Individuelt/På Banen.
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }

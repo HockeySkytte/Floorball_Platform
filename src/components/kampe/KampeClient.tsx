@@ -6,6 +6,7 @@ type Match = {
   id: string;
   title: string;
   videoUrl: string;
+  matchDate: string;
   createdAt: string;
 };
 
@@ -125,7 +126,9 @@ export default function KampeClient() {
               className="rounded-md border border-zinc-200 bg-white p-4 text-left hover:border-zinc-300"
             >
               <div className="text-sm font-semibold">{m.title}</div>
-              <div className="mt-1 text-xs text-zinc-600">Klik for at afspille</div>
+              <div className="mt-1 text-xs text-zinc-600">
+                {new Date(m.matchDate).toLocaleDateString("da-DK")} • Klik for at afspille
+              </div>
             </button>
           ))}
         </div>

@@ -41,6 +41,20 @@ enum StatsFileKind {
   PLAYERS
 }
 
+enum JsonDocumentScope {
+  TEAM
+  PUBLIC
+}
+
+enum JsonDocumentKind {
+  PLAYBOOK
+  EXERCISE
+}
+
+enum TestType {
+  BEEP
+}
+
 model Team {
   id        String   @id @default(cuid())
   name      String   @unique
@@ -52,8 +66,38 @@ model Team {
   statsEvents StatsEvent[]
   statsPlayers StatsPlayer[]
   matches   Match[]
+  jsonDocuments JsonDocument[]
+  tests     TeamTest[]
+  readinessEntries TeamReadinessEntry[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model TeamReadinessEntry {
+  id        String   @id @default(cuid())
+
+  teamId    String
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Date-only represented as a DateTime (stored in UTC).
+  entryDate DateTime
+
+  fatigue       Int
+  sleepQuality  Int
+  sleepDuration Int
+  soreness      Int
+  mood          Int
+  stress        Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([teamId, userId, entryDate])
+  @@index([teamId, entryDate])
+  @@index([userId, entryDate])
 }
 
 model Match {
@@ -64,10 +108,72 @@ model Match {
   title     String
   videoUrl  String
 
+  matchDate DateTime
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([teamId, matchDate])
   @@index([teamId, createdAt])
+}
+
+model JsonDocument {
+  id        String   @id @default(cuid())
+
+  scope     JsonDocumentScope
+  kind      JsonDocumentKind
+
+  teamId    String?
+  team      Team?    @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  title     String
+  content   String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([scope, kind, createdAt])
+  @@index([teamId, kind, createdAt])
+}
+
+model TeamTest {
+  id        String   @id @default(cuid())
+
+  teamId    String
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  type      TestType
+  testDate  DateTime
+
+  results   TeamTestResult[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([teamId, testDate])
+  @@index([teamId, createdAt])
+}
+
+model TeamTestResult {
+  id        String   @id @default(cuid())
+
+  testId    String
+  test      TeamTest @relation(fields: [testId], references: [id], onDelete: Cascade)
+
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Used when the participant is not a registered member/user.
+  externalName String?
+
+  resultText String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([testId, userId])
+  @@unique([testId, externalName])
+  @@index([testId, createdAt])
 }
 
 model User {
@@ -77,6 +183,13 @@ model User {
   email        String         @unique
   username     String         @unique
   passwordHash String
+
+  name         String?
+  imageUrl     String?
+
+  position     String?
+  birthDate    DateTime?
+  phoneNumber  String?
 
   approvedById String?
   approvedBy   User?          @relation("UserApprovals", fields: [approvedById], references: [id], onDelete: SetNull)
@@ -91,6 +204,9 @@ model User {
   approvedMemberships TeamMembership[] @relation("MembershipApprovals")
 
   uploadedStatsFiles StatsFile[] @relation("StatsFileUploader")
+
+  testResults TeamTestResult[]
+  readinessEntries TeamReadinessEntry[]
 }
 
 model TeamMembership {

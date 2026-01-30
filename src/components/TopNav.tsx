@@ -10,8 +10,12 @@ export type TopNavUser = {
 
 export default function TopNav({
   user,
+  leaderPendingCount,
+  adminPendingLeadersCount,
 }: {
   user: TopNavUser | null;
+  leaderPendingCount?: number;
+  adminPendingLeadersCount?: number;
 }) {
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -30,6 +34,14 @@ export default function TopNav({
             <Link className="hover:underline" href="/taktiktavle">
               Taktiktavle
             </Link>
+            <a
+              className="hover:underline"
+              href="https://sports-tagging.netlify.app/floorball/"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Shot Plotter
+            </a>
             <Link className="hover:underline" href="/kampe">
               Kampe
             </Link>
@@ -45,13 +57,27 @@ export default function TopNav({
 
             {user?.isAdmin ? (
               <Link className="hover:underline" href="/admin">
-                Admin
+                <span className="inline-flex items-center gap-2">
+                  Admin
+                  {(adminPendingLeadersCount ?? 0) > 0 ? (
+                    <span className="inline-grid min-w-[20px] place-items-center rounded-full bg-red-600 px-1.5 text-xs font-bold leading-5 text-white">
+                      {adminPendingLeadersCount}
+                    </span>
+                  ) : null}
+                </span>
               </Link>
             ) : null}
 
             {user?.teamRole === "LEADER" ? (
               <Link className="hover:underline" href="/leder">
-                Leder
+                <span className="inline-flex items-center gap-2">
+                  Leder
+                  {(leaderPendingCount ?? 0) > 0 ? (
+                    <span className="inline-grid min-w-[20px] place-items-center rounded-full bg-red-600 px-1.5 text-xs font-bold leading-5 text-white">
+                      {leaderPendingCount}
+                    </span>
+                  ) : null}
+                </span>
               </Link>
             ) : null}
           </nav>
@@ -69,6 +95,14 @@ export default function TopNav({
                 <Link className="rounded px-2 py-1 hover:bg-zinc-50" href="/taktiktavle">
                   Taktiktavle
                 </Link>
+                <a
+                  className="rounded px-2 py-1 hover:bg-zinc-50"
+                  href="https://sports-tagging.netlify.app/floorball/"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Shot Plotter
+                </a>
                 <Link className="rounded px-2 py-1 hover:bg-zinc-50" href="/kampe">
                   Kampe
                 </Link>
@@ -84,13 +118,27 @@ export default function TopNav({
 
                 {user?.isAdmin ? (
                   <Link className="rounded px-2 py-1 hover:bg-zinc-50" href="/admin">
-                    Admin
+                    <span className="flex items-center justify-between gap-3">
+                      <span>Admin</span>
+                      {(adminPendingLeadersCount ?? 0) > 0 ? (
+                        <span className="inline-grid min-w-[20px] place-items-center rounded-full bg-red-600 px-1.5 text-xs font-bold leading-5 text-white">
+                          {adminPendingLeadersCount}
+                        </span>
+                      ) : null}
+                    </span>
                   </Link>
                 ) : null}
 
                 {user?.teamRole === "LEADER" ? (
                   <Link className="rounded px-2 py-1 hover:bg-zinc-50" href="/leder">
-                    Leder
+                    <span className="flex items-center justify-between gap-3">
+                      <span>Leder</span>
+                      {(leaderPendingCount ?? 0) > 0 ? (
+                        <span className="inline-grid min-w-[20px] place-items-center rounded-full bg-red-600 px-1.5 text-xs font-bold leading-5 text-white">
+                          {leaderPendingCount}
+                        </span>
+                      ) : null}
+                    </span>
                   </Link>
                 ) : null}
 

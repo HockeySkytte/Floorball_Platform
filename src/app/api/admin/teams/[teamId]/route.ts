@@ -90,7 +90,7 @@ export async function PATCH(
       logoUrl,
       themePrimary: themePrimary as TeamColor,
       themeSecondary: themeSecondary as TeamColor,
-    },
+    } as any,
     select: {
       id: true,
       name: true,
@@ -98,7 +98,7 @@ export async function PATCH(
       themePrimary: true,
       themeSecondary: true,
       updatedAt: true,
-    },
+    } as any,
   });
 
   return NextResponse.json({ team });

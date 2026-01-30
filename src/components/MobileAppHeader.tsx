@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import TeamSlicer, { type TeamOption } from "@/components/TeamSlicer";
 import StatsSidebarSlicers from "@/components/stats/StatsSidebarSlicers";
+import PlayerSlicer from "@/components/PlayerSlicer";
+import SpillerVideoSidebarSlicers from "@/components/spiller/SpillerVideoSidebarSlicers";
 
 export type MobileAppHeaderUser = {
   username: string;
@@ -17,16 +19,23 @@ export default function MobileAppHeader({
   teams,
   selectedTeamId,
   logoUrl,
+  leaderPendingCount,
+  adminPendingLeadersCount,
 }: {
   user: MobileAppHeaderUser;
   isAdmin: boolean;
   teams: TeamOption[];
   selectedTeamId: string | null;
   logoUrl: string | null;
+  leaderPendingCount?: number;
+  adminPendingLeadersCount?: number;
 }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [filtersOpen, setFiltersOpen] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
+  const isSpiller = pathname === "/spiller" || pathname.startsWith("/spiller/");
+  const spillerTab = String(searchParams.get("tab") ?? "").toLowerCase();
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -117,12 +126,26 @@ export default function MobileAppHeader({
                 </Link>
                 {isAdmin ? (
                   <Link className="block px-4 py-4 text-lg font-semibold" href="/admin">
-                    Admin
+                    <span className="flex items-center justify-between gap-3">
+                      <span>Admin</span>
+                      {(adminPendingLeadersCount ?? 0) > 0 ? (
+                        <span className="inline-grid min-w-[20px] place-items-center rounded-full bg-red-600 px-1.5 text-xs font-bold leading-5 text-white">
+                          {adminPendingLeadersCount}
+                        </span>
+                      ) : null}
+                    </span>
                   </Link>
                 ) : null}
                 {user.teamRole === "LEADER" ? (
                   <Link className="block px-4 py-4 text-lg font-semibold" href="/leder">
-                    Leder
+                    <span className="flex items-center justify-between gap-3">
+                      <span>Leder</span>
+                      {(leaderPendingCount ?? 0) > 0 ? (
+                        <span className="inline-grid min-w-[20px] place-items-center rounded-full bg-red-600 px-1.5 text-xs font-bold leading-5 text-white">
+                          {leaderPendingCount}
+                        </span>
+                      ) : null}
+                    </span>
                   </Link>
                 ) : null}
 
@@ -162,6 +185,10 @@ export default function MobileAppHeader({
             {pathname === "/statistik" || pathname.startsWith("/statistik/") ? (
               <StatsSidebarSlicers />
             ) : null}
+
+            {isSpiller ? <PlayerSlicer /> : null}
+
+            {isSpiller && spillerTab === "video" ? <SpillerVideoSidebarSlicers /> : null}
           </div>
         ) : null}
       </div>

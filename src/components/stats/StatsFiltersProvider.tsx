@@ -6,6 +6,8 @@ export type StatsFilters = {
   perspektiv: string;
   kamp: string;
   styrke: string;
+  event: string;
+  scope: "" | "individual" | "onIce";
   spiller: string;
   maalmand: string;
   paaBanen: string[];
@@ -16,6 +18,8 @@ type StatsFiltersContextValue = {
   setPerspektiv: (v: string) => void;
   setKamp: (v: string) => void;
   setStyrke: (v: string) => void;
+  setEvent: (v: string) => void;
+  setScope: (v: "" | "individual" | "onIce") => void;
   setSpiller: (v: string) => void;
   setMaalmand: (v: string) => void;
   setPaaBanen: (v: string[]) => void;
@@ -38,6 +42,8 @@ export default function StatsFiltersProvider({
     perspektiv: "",
     kamp: "",
     styrke: "",
+    event: "",
+    scope: "",
     spiller: "",
     maalmand: "",
     paaBanen: [],
@@ -60,6 +66,16 @@ export default function StatsFiltersProvider({
         setFilters((s) => ({
           ...s,
           styrke: v,
+        })),
+      setEvent: (v) =>
+        setFilters((s) => ({
+          ...s,
+          event: v,
+        })),
+      setScope: (v) =>
+        setFilters((s) => ({
+          ...s,
+          scope: v,
         })),
       setSpiller: (v) =>
         setFilters((s) => ({

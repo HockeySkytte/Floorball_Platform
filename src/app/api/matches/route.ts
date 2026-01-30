@@ -7,11 +7,12 @@ export async function GET() {
 
   const matches = await prisma.match.findMany({
     where: { teamId },
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ matchDate: "desc" }, { createdAt: "desc" }],
     select: {
       id: true,
       title: true,
       videoUrl: true,
+      matchDate: true,
       createdAt: true,
       updatedAt: true,
     },

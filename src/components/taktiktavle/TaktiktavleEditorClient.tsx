@@ -212,6 +212,16 @@ export default function TaktiktavleEditorClient() {
   const [activeFrameIndex, setActiveFrameIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
 
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadTeams, setUploadTeams] = useState<Array<{ id: string; name: string }>>([]);
+  const [uploadKind, setUploadKind] = useState<"PLAYBOOK" | "EXERCISE">("PLAYBOOK");
+  const [uploadScope, setUploadScope] = useState<"TEAM" | "PUBLIC">("TEAM");
+  const [uploadTeamId, setUploadTeamId] = useState<string>("");
+  const [uploadTitle, setUploadTitle] = useState<string>("");
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadBusy, setUploadBusy] = useState(false);
+
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -220,7 +230,7 @@ export default function TaktiktavleEditorClient() {
 
   const [containerSize, setContainerSize] = useState({ w: 900, h: 560 });
 
-  const playRef = useRef<{ frameStart: number } | null>(null);
+  const playRef = useRef<{ frameStart: number; frameIndex: number } | null>(null);
   const draftRef = useRef<(PathShape & { draftStage?: 1 | 2; draftMode?: "straight" | "curve" }) | null>(null);
   const dragRef = useRef<
     | null
@@ -742,6 +752,189 @@ export default function TaktiktavleEditorClient() {
     a.click();
   }
 
+  async function downloadCurrent() {
+    if (!doc) return;
+    if (isDownloading) return;
+
+    if (doc.kind === "image") {
+      exportPng();
+      return;
+    }
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    setIsDownloading(true);
+
+    const prevFrameIndex = activeFrameIndex;
+    const prevPlaying = isPlaying;
+    const prevSelected = selectedId;
+
+    try {
+      // Play from frame 1 and capture canvas
+      setSelectedId(null);
+      setActiveFrameIndex(0);
+      playRef.current = { frameStart: performance.now(), frameIndex: 0 };
+      setIsPlaying(true);
+
+      // Wait a tick so canvas draws the first frame
+      await new Promise((r) => setTimeout(r, 50));
+
+      const fps = 30;
+      const stream = (canvas as any).captureStream?.(fps) as MediaStream | undefined;
+      if (!stream) {
+        window.alert("Din browser understøtter ikke video-download her.");
+        return;
+      }
+
+      const chunks: BlobPart[] = [];
+      const preferredTypes = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"];
+      const mimeType = preferredTypes.find((t) => (window as any).MediaRecorder?.isTypeSupported?.(t)) ?? "video/webm";
+
+      const rec = new MediaRecorder(stream, { mimeType });
+      rec.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) chunks.push(e.data);
+      };
+
+      const totalMs = doc.frames.reduce((sum, f) => sum + Math.max(200, f.durationMs), 0);
+
+      const done = new Promise<Blob>((resolve, reject) => {
+        rec.onerror = () => reject(new Error("RECORDER_ERROR"));
+        rec.onstop = () => resolve(new Blob(chunks, { type: mimeType }));
+      });
+
+      rec.start(250);
+      await new Promise((r) => setTimeout(r, totalMs + 120));
+      rec.stop();
+
+      const webm = await done;
+
+      // Convert to MP4 via ffmpeg.wasm (loaded on-demand)
+      try {
+        const [{ FFmpeg }, { fetchFile, toBlobURL }] = await Promise.all([
+          import("@ffmpeg/ffmpeg"),
+          import("@ffmpeg/util"),
+        ]);
+
+        const coreBase = "https://unpkg.com/@ffmpeg/core@0.12.6/dist";
+
+        const ffmpeg = new FFmpeg();
+        await ffmpeg.load({
+          coreURL: await toBlobURL(`${coreBase}/ffmpeg-core.js`, "text/javascript"),
+          wasmURL: await toBlobURL(`${coreBase}/ffmpeg-core.wasm`, "application/wasm"),
+        });
+
+        await ffmpeg.writeFile("in.webm", await fetchFile(webm));
+        await ffmpeg.exec(["-i", "in.webm", "-c:v", "libx264", "-pix_fmt", "yuv420p", "out.mp4"]);
+        const out = await ffmpeg.readFile("out.mp4");
+        if (typeof out === "string") throw new Error("FFMPEG_OUTPUT_NOT_BINARY");
+        // Copy to ensure an ArrayBuffer-backed view (avoids SharedArrayBuffer typing issues in TS)
+        const copy = new Uint8Array(out.byteLength);
+        copy.set(out);
+        const mp4Blob = new Blob([copy.buffer], { type: "video/mp4" });
+
+        const url = URL.createObjectURL(mp4Blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${doc.name.replace(/[^a-z0-9_-]+/gi, "_") || "taktiktavle"}.mp4`;
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch {
+        // Fallback to WebM download if MP4 conversion fails
+        const url = URL.createObjectURL(webm);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${doc.name.replace(/[^a-z0-9_-]+/gi, "_") || "taktiktavle"}.webm`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    } finally {
+      setIsPlaying(prevPlaying);
+      setActiveFrameIndex(prevFrameIndex);
+      setSelectedId(prevSelected);
+      playRef.current = { frameStart: performance.now(), frameIndex: prevFrameIndex };
+      setIsDownloading(false);
+      requestAnimationFrame(() => redraw(performance.now()));
+    }
+  }
+
+  async function openUpload() {
+    if (!doc) return;
+    setUploadError(null);
+    setUploadBusy(false);
+    setUploadTitle(doc.name ?? "");
+    setUploadKind("PLAYBOOK");
+    setUploadScope("TEAM");
+    setUploadTeams([]);
+    setUploadTeamId("");
+    setUploadOpen(true);
+
+    try {
+      const res = await fetch("/api/ui/my-teams", { cache: "no-store" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setUploadError(data?.message ?? "Kunne ikke hente hold.");
+        return;
+      }
+      const teams = Array.isArray(data?.teams) ? (data.teams as Array<{ id: string; name: string }>) : [];
+      setUploadTeams(teams);
+      const activeTeamId = typeof data?.activeTeamId === "string" ? data.activeTeamId : "";
+      if (activeTeamId) setUploadTeamId(activeTeamId);
+      else if (teams[0]?.id) setUploadTeamId(teams[0].id);
+    } catch {
+      setUploadError("Kunne ikke hente hold.");
+    }
+  }
+
+  async function doUpload() {
+    if (uploadBusy) return;
+    setUploadError(null);
+
+    if (!doc) {
+      setUploadError("Ingen taktiktavle at uploade.");
+      return;
+    }
+
+    const title = uploadTitle.trim() || doc.name || "Taktiktavle";
+    if (!title) {
+      setUploadError("Titel mangler.");
+      return;
+    }
+
+    if (uploadScope === "TEAM" && !uploadTeamId) {
+      setUploadError("Vælg et hold.");
+      return;
+    }
+
+    const text = JSON.stringify(doc);
+
+    setUploadBusy(true);
+    try {
+      const res = await fetch("/api/json-documents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title,
+          kind: uploadKind,
+          scope: uploadScope,
+          teamId: uploadScope === "TEAM" ? uploadTeamId : null,
+          content: text,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setUploadError(data?.message ?? "Upload fejlede.");
+        return;
+      }
+
+      setUploadOpen(false);
+      window.alert("Upload gennemført.");
+    } finally {
+      setUploadBusy(false);
+    }
+  }
+
   function clearFrame() {
     if (!doc) return;
     applyMutation((d) => {
@@ -847,7 +1040,11 @@ export default function TaktiktavleEditorClient() {
       return;
     }
 
-    const frame = doc.frames[Math.min(activeFrameIndex, doc.frames.length - 1)]!;
+    const playbackIndex =
+      doc.kind === "animation" && isPlaying && playRef.current
+        ? playRef.current.frameIndex
+        : activeFrameIndex;
+    const frame = doc.frames[Math.min(playbackIndex, doc.frames.length - 1)]!;
 
     // Playback progress for attached objects
     const progress = (() => {
@@ -1050,16 +1247,21 @@ export default function TaktiktavleEditorClient() {
     if (!doc || doc.kind !== "animation" || !isPlaying) return;
 
     let raf = 0;
-    playRef.current = { frameStart: performance.now() };
+    playRef.current = {
+      frameStart: performance.now(),
+      frameIndex: Math.min(activeFrameIndex, doc.frames.length - 1),
+    };
 
     const tick = (now: number) => {
       if (!doc) return;
-      const frame = doc.frames[Math.min(activeFrameIndex, doc.frames.length - 1)]!;
+      const curIndex = playRef.current?.frameIndex ?? Math.min(activeFrameIndex, doc.frames.length - 1);
+      const frame = doc.frames[Math.min(curIndex, doc.frames.length - 1)]!;
       const dur = Math.max(200, frame.durationMs);
       const start = playRef.current?.frameStart ?? now;
       if (now - start >= dur) {
-        playRef.current = { frameStart: now };
-        setActiveFrameIndex((i) => (i + 1) % doc.frames.length);
+        const nextIndex = (curIndex + 1) % doc.frames.length;
+        playRef.current = { frameStart: now, frameIndex: nextIndex };
+        setActiveFrameIndex(nextIndex);
       }
       redraw(now);
       raf = requestAnimationFrame(tick);
@@ -1087,14 +1289,24 @@ export default function TaktiktavleEditorClient() {
           <button
             type="button"
             onClick={() => createNew("image")}
-            className="rounded-md bg-[var(--brand)] px-3 py-2 text-sm font-semibold text-[var(--brand-foreground)]"
+            className={
+              "rounded-md px-3 py-2 text-sm font-semibold " +
+              ((doc?.kind ?? "image") === "image"
+                ? "bg-[var(--brand)] text-[var(--brand-foreground)]"
+                : "border border-[color:var(--surface-border)] bg-transparent")
+            }
           >
             Opret Billede
           </button>
           <button
             type="button"
             onClick={() => createNew("animation")}
-            className="rounded-md border border-[color:var(--surface-border)] bg-transparent px-3 py-2 text-sm font-semibold"
+            className={
+              "rounded-md px-3 py-2 text-sm font-semibold " +
+              ((doc?.kind ?? "image") === "animation"
+                ? "bg-[var(--brand)] text-[var(--brand-foreground)]"
+                : "border border-[color:var(--surface-border)] bg-transparent")
+            }
           >
             Opret Animation
           </button>
@@ -1116,19 +1328,19 @@ export default function TaktiktavleEditorClient() {
           </button>
           <button
             type="button"
-            onClick={exportPng}
+            onClick={downloadCurrent}
             disabled={!doc}
             className="rounded-md border border-[color:var(--surface-border)] bg-transparent px-3 py-2 text-sm font-semibold disabled:opacity-50"
           >
-            Download PNG
+            {isDownloading ? "Downloader…" : "Download"}
           </button>
           <button
             type="button"
-            onClick={exportJson}
+            onClick={openUpload}
             disabled={!doc}
             className="rounded-md border border-[color:var(--surface-border)] bg-transparent px-3 py-2 text-sm font-semibold disabled:opacity-50"
           >
-            Eksportér JSON
+            Upload
           </button>
           <button
             type="button"
@@ -1164,7 +1376,7 @@ export default function TaktiktavleEditorClient() {
                   type="button"
                   onClick={() => {
                     setIsPlaying((p) => !p);
-                    playRef.current = { frameStart: performance.now() };
+                    playRef.current = { frameStart: performance.now(), frameIndex: Math.min(activeFrameIndex, doc.frames.length - 1) };
                   }}
                   className="rounded-md bg-[var(--brand)] px-3 py-1.5 text-sm font-semibold text-[var(--brand-foreground)]"
                 >
@@ -1172,6 +1384,111 @@ export default function TaktiktavleEditorClient() {
                 </button>
               </div>
             ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {uploadOpen ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setUploadOpen(false);
+          }}
+        >
+          <div className="w-full max-w-lg overflow-hidden rounded-lg bg-white shadow-xl">
+            <div className="flex items-center justify-between gap-2 border-b border-zinc-200 px-4 py-3">
+              <div className="text-sm font-semibold">Upload Taktiktavle</div>
+              <button
+                type="button"
+                onClick={() => setUploadOpen(false)}
+                className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm"
+              >
+                Luk
+              </button>
+            </div>
+
+            <div className="space-y-3 p-4 text-sm">
+              {uploadError ? <p className="text-sm text-red-600">{uploadError}</p> : null}
+
+              <div className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-700">
+                Uploader nuværende taktiktavle som JSON til databasen.
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block">
+                  <div className="text-xs font-semibold text-zinc-700">Type</div>
+                  <select
+                    className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
+                    value={uploadKind}
+                    onChange={(e) => setUploadKind(e.target.value as "PLAYBOOK" | "EXERCISE")}
+                  >
+                    <option value="PLAYBOOK">Playbook</option>
+                    <option value="EXERCISE">Øvelse</option>
+                  </select>
+                </label>
+
+                <label className="block">
+                  <div className="text-xs font-semibold text-zinc-700">Synlighed</div>
+                  <select
+                    className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
+                    value={uploadScope}
+                    onChange={(e) => setUploadScope(e.target.value as "TEAM" | "PUBLIC")}
+                  >
+                    <option value="TEAM">Hold</option>
+                    <option value="PUBLIC">Offentligt</option>
+                  </select>
+                </label>
+              </div>
+
+              {uploadScope === "TEAM" ? (
+                <label className="block">
+                  <div className="text-xs font-semibold text-zinc-700">Hold</div>
+                  <select
+                    className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
+                    value={uploadTeamId}
+                    onChange={(e) => setUploadTeamId(e.target.value)}
+                    disabled={uploadTeams.length === 0}
+                  >
+                    {uploadTeams.length === 0 ? <option value="">Ingen hold</option> : null}
+                    {uploadTeams.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+
+              <label className="block">
+                <div className="text-xs font-semibold text-zinc-700">Titel</div>
+                <input
+                  className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
+                  value={uploadTitle}
+                  onChange={(e) => setUploadTitle(e.target.value)}
+                />
+              </label>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setUploadOpen(false)}
+                  className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
+                  disabled={uploadBusy}
+                >
+                  Annuller
+                </button>
+                <button
+                  type="button"
+                  onClick={doUpload}
+                  className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                  disabled={uploadBusy}
+                >
+                  {uploadBusy ? "Uploader…" : "Upload"}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       ) : null}
@@ -1224,7 +1541,7 @@ export default function TaktiktavleEditorClient() {
                 onClick={() => {
                   setIsPlaying(false);
                   setActiveFrameIndex(idx);
-                  playRef.current = { frameStart: performance.now() };
+                  playRef.current = { frameStart: performance.now(), frameIndex: idx };
                 }}
                 className={
                   "rounded-md px-3 py-2 text-sm font-semibold " +

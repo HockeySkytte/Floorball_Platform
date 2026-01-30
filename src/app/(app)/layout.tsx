@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { ApprovalStatus } from "@prisma/client";
+import { ApprovalStatus, TeamRole } from "@prisma/client";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
@@ -40,6 +40,27 @@ export default async function AppLayout({
   const selectedTeamLogoUrl =
     teams.find((t) => t.id === resolvedSelectedTeamId)?.logoUrl ?? null;
 
+  const leaderPendingCount =
+    user.activeRole === TeamRole.LEADER && user.activeTeam?.id
+      ? await prisma.teamMembership.count({
+          where: {
+            teamId: user.activeTeam.id,
+            status: ApprovalStatus.PENDING_LEADER,
+            role: { in: [TeamRole.PLAYER, TeamRole.SUPPORTER] },
+          },
+        })
+      : 0;
+
+  const adminPendingLeadersCount =
+    isAdmin
+      ? await prisma.teamMembership.count({
+          where: {
+            role: TeamRole.LEADER,
+            status: ApprovalStatus.PENDING_ADMIN,
+          },
+        })
+      : 0;
+
   return (
     <StatsFiltersProvider>
       <TaktiktavleProvider>
@@ -72,6 +93,8 @@ export default async function AppLayout({
           <div className="hidden md:block">
             <TopNav
               user={{ username: user.username, isAdmin, teamRole: user.activeRole }}
+              leaderPendingCount={leaderPendingCount}
+              adminPendingLeadersCount={adminPendingLeadersCount}
             />
           </div>
 
@@ -81,6 +104,8 @@ export default async function AppLayout({
             teams={teams}
             selectedTeamId={resolvedSelectedTeamId}
             logoUrl={selectedTeamLogoUrl}
+            leaderPendingCount={leaderPendingCount}
+            adminPendingLeadersCount={adminPendingLeadersCount}
           />
 
           <main className="flex-1 min-w-0 p-4 text-[var(--surface-foreground)] md:p-6">

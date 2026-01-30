@@ -3,9 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "node scripts/dev.cjs",
+    "prebuild": "prisma generate",
     "build": "next build",
-    "start": "npx prisma migrate deploy && next start",
+    "start": "node scripts/start.cjs",
     "lint": "eslint",
     "postinstall": "node scripts/postinstall-prisma-junction.cjs"
   },
@@ -13,6 +14,8 @@
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@ffmpeg/ffmpeg": "^0.12.10",
+    "@ffmpeg/util": "^0.12.1",
     "@prisma/client": "^6.0.0",
     "bcryptjs": "^3.0.3",
     "iron-session": "^8.0.4",
