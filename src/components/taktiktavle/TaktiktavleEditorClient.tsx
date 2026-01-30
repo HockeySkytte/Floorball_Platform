@@ -57,6 +57,7 @@ type TextShape = ShapeBase & {
   x: number;
   y: number;
   text: string;
+  fontSize: number;
 };
 
 type Shape = PathShape | PlayerShape | ConeShape | BallShape | TextShape;
@@ -113,7 +114,11 @@ function hitTest(shape: Shape, x: number, y: number) {
   if (shape.type === "player") return Math.hypot(x - shape.x, y - shape.y) <= shape.r + 8;
   if (shape.type === "cone") return Math.hypot(x - shape.x, y - shape.y) <= shape.size + 10;
   if (shape.type === "ball") return Math.hypot(x - shape.x, y - shape.y) <= shape.r + 8;
-  if (shape.type === "text") return Math.hypot(x - shape.x, y - shape.y) <= 24;
+  if (shape.type === "text") {
+    const w = shape.text.length * shape.fontSize * 0.55 + 14;
+    const h = shape.fontSize + 14;
+    return x >= shape.x - 8 && x <= shape.x + w && y >= shape.y - h && y <= shape.y + 8;
+  }
 
   // Path: sample points and compute min distance to polyline segments
   const pts: Array<{ x: number; y: number }> = [];
@@ -191,7 +196,7 @@ function templateLabel(t: CanvasTemplate) {
 }
 
 export default function TaktiktavleEditorClient() {
-  const { tool, color, strokeWidth } = useTaktiktavleUi();
+  const { tool, color, strokeWidth, lineMode, accessorySize } = useTaktiktavleUi();
 
   const [doc, setDoc] = useState<DocumentState | null>(null);
   const [past, setPast] = useState<DocumentState[]>([]);
@@ -214,7 +219,7 @@ export default function TaktiktavleEditorClient() {
   const [containerSize, setContainerSize] = useState({ w: 900, h: 560 });
 
   const playRef = useRef<{ frameStart: number } | null>(null);
-  const draftRef = useRef<Shape | null>(null);
+  const draftRef = useRef<(PathShape & { draftStage?: 1 | 2; draftMode?: "straight" | "curve" }) | null>(null);
   const dragRef = useRef<
     | null
     | {
@@ -234,6 +239,15 @@ export default function TaktiktavleEditorClient() {
     if (!activeFrame || !selectedId) return null;
     return activeFrame.shapes.find((s) => s.id === selectedId) ?? null;
   }, [activeFrame, selectedId]);
+
+  useEffect(() => {
+    if (tool.startsWith("line-") || tool.startsWith("arrow-")) return;
+    if (draftRef.current) {
+      draftRef.current = null;
+      requestAnimationFrame(() => redraw(performance.now()));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tool]);
 
   useEffect(() => {
     const img = new Image();
@@ -437,29 +451,66 @@ export default function TaktiktavleEditorClient() {
 
     // Accessories
     if (tool === "player") {
-      commitShape({ id: uid(), type: "player", x: p.x, y: p.y, r: 9, color, width: strokeWidth });
+      commitShape({
+        id: uid(),
+        type: "player",
+        x: p.x,
+        y: p.y,
+        r: Math.max(4, accessorySize),
+        color,
+        width: strokeWidth,
+      });
       return;
     }
     if (tool === "cone") {
-      commitShape({ id: uid(), type: "cone", x: p.x, y: p.y, size: 10, color, width: strokeWidth });
+      commitShape({
+        id: uid(),
+        type: "cone",
+        x: p.x,
+        y: p.y,
+        size: Math.max(4, accessorySize),
+        color,
+        width: strokeWidth,
+      });
       return;
     }
     if (tool === "ball") {
-      commitShape({ id: uid(), type: "ball", x: p.x, y: p.y, r: 7, color, width: strokeWidth });
+      commitShape({
+        id: uid(),
+        type: "ball",
+        x: p.x,
+        y: p.y,
+        r: Math.max(3, Math.round(accessorySize * 0.75)),
+        color,
+        width: strokeWidth,
+      });
       return;
     }
     if (tool === "text") {
       const text = window.prompt("Tekst:") ?? "";
       if (text.trim()) {
-        commitShape({ id: uid(), type: "text", x: p.x, y: p.y, text: text.trim(), color, width: strokeWidth });
+        commitShape({
+          id: uid(),
+          type: "text",
+          x: p.x,
+          y: p.y,
+          text: text.trim(),
+          fontSize: Math.max(10, Math.round(accessorySize * 1.35)),
+          color,
+          width: strokeWidth,
+        });
       }
       return;
     }
 
-    // Path tools
+    // Path tools (click-based)
     const cfg = currentLineConfig();
-    if (cfg) {
-      const ctrl = computeDefaultControl(p.x, p.y, p.x, p.y);
+    if (!cfg) return;
+
+    const existing = draftRef.current;
+
+    // First click = start
+    if (!existing) {
       const attachId = doc.kind === "animation" && selectedShape && selectedShape.type !== "path" ? selectedShape.id : null;
       draftRef.current = {
         id: uid(),
@@ -468,17 +519,61 @@ export default function TaktiktavleEditorClient() {
         arrow: cfg.arrow,
         x1: p.x,
         y1: p.y,
-        cx: ctrl.cx,
-        cy: ctrl.cy,
+        cx: p.x,
+        cy: p.y,
         x2: p.x,
         y2: p.y,
         attachId,
         color,
         width: strokeWidth,
+        draftStage: 1,
+        draftMode: lineMode,
       };
-      (ev.target as HTMLElement).setPointerCapture(ev.pointerId);
       requestAnimationFrame(() => redraw(performance.now()));
+      return;
     }
+
+    const stage = existing.draftStage ?? 1;
+    const mode = existing.draftMode ?? "curve";
+
+    // Second click = end (straight commits; curve advances to pick control point)
+    if (stage === 1) {
+      existing.x2 = p.x;
+      existing.y2 = p.y;
+      const len = Math.hypot(existing.x2 - existing.x1, existing.y2 - existing.y1);
+      if (len <= 4) {
+        draftRef.current = null;
+        requestAnimationFrame(() => redraw(performance.now()));
+        return;
+      }
+
+      if (mode === "straight") {
+        existing.cx = (existing.x1 + existing.x2) / 2;
+        existing.cy = (existing.y1 + existing.y2) / 2;
+        const { draftStage, draftMode, ...toCommit } = existing;
+        draftRef.current = null;
+        commitShape(toCommit);
+        return;
+      }
+
+      const ctrl = computeDefaultControl(existing.x1, existing.y1, existing.x2, existing.y2);
+      existing.cx = ctrl.cx;
+      existing.cy = ctrl.cy;
+      existing.draftStage = 2;
+      requestAnimationFrame(() => redraw(performance.now()));
+      return;
+    }
+
+    // Third click = control point (curve commits)
+    if (stage === 2) {
+      existing.cx = p.x;
+      existing.cy = p.y;
+      const { draftStage, draftMode, ...toCommit } = existing;
+      draftRef.current = null;
+      commitShape(toCommit);
+      return;
+    }
+
   }
 
   function onPointerMove(ev: React.PointerEvent) {
@@ -500,14 +595,27 @@ export default function TaktiktavleEditorClient() {
       return;
     }
 
-    // Draft path
+    // Draft path preview
     const d = draftRef.current;
     if (!d || d.type !== "path") return;
-    d.x2 = p.x;
-    d.y2 = p.y;
-    const ctrl = computeDefaultControl(d.x1, d.y1, d.x2, d.y2);
-    d.cx = ctrl.cx;
-    d.cy = ctrl.cy;
+    const stage = d.draftStage ?? 1;
+    const mode = d.draftMode ?? "curve";
+
+    if (stage === 1) {
+      d.x2 = p.x;
+      d.y2 = p.y;
+      if (mode === "straight") {
+        d.cx = (d.x1 + d.x2) / 2;
+        d.cy = (d.y1 + d.y2) / 2;
+      } else {
+        const ctrl = computeDefaultControl(d.x1, d.y1, d.x2, d.y2);
+        d.cx = ctrl.cx;
+        d.cy = ctrl.cy;
+      }
+    } else if (stage === 2) {
+      d.cx = p.x;
+      d.cy = p.y;
+    }
     requestAnimationFrame(() => redraw(performance.now()));
   }
 
@@ -526,20 +634,6 @@ export default function TaktiktavleEditorClient() {
       }
       requestAnimationFrame(() => redraw(performance.now()));
       return;
-    }
-
-    // Commit draft
-    const d = draftRef.current;
-    if (d && d.type === "path") {
-      draftRef.current = null;
-      const len = Math.hypot(d.x2 - d.x1, d.y2 - d.y1);
-      if (len > 4) commitShape(d);
-      try {
-        (ev.target as HTMLElement).releasePointerCapture(ev.pointerId);
-      } catch {
-        // ignore
-      }
-      requestAnimationFrame(() => redraw(performance.now()));
     }
   }
 
@@ -747,12 +841,28 @@ export default function TaktiktavleEditorClient() {
         ctx.strokeStyle = s.color;
         ctx.lineWidth = 2;
         ctx.stroke();
-        ctx.fillStyle = s.color;
+
+        // Floorball-ish holes
+        const holeR = Math.max(1.2, s.r * 0.18);
+        const ringR = Math.max(2.2, s.r * 0.55);
+        ctx.fillStyle = "rgba(0,0,0,0.18)";
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2;
+          ctx.beginPath();
+          ctx.arc(x + Math.cos(a) * ringR, y + Math.sin(a) * ringR, holeR, 0, Math.PI * 2);
+          ctx.fill();
+        }
         ctx.beginPath();
-        ctx.arc(x, y, Math.max(1.5, s.r * 0.25), 0, Math.PI * 2);
+        ctx.arc(x, y, Math.max(1.2, s.r * 0.2), 0, Math.PI * 2);
         ctx.fill();
+
+        ctx.strokeStyle = "rgba(0,0,0,0.12)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(x, y, ringR, 0, Math.PI * 2);
+        ctx.stroke();
       } else if (s.type === "text") {
-        ctx.font = "700 14px ui-sans-serif, system-ui";
+        ctx.font = `700 ${s.fontSize}px ui-sans-serif, system-ui`;
         ctx.fillStyle = s.color;
         ctx.fillText(s.text, x, y);
       }
@@ -762,7 +872,9 @@ export default function TaktiktavleEditorClient() {
         ctx.lineWidth = 1;
         ctx.setLineDash([3, 3]);
         ctx.beginPath();
-        ctx.arc(x, y, 16, 0, Math.PI * 2);
+        const r =
+          s.type === "player" ? s.r + 8 : s.type === "cone" ? s.size + 10 : s.type === "ball" ? s.r + 8 : s.fontSize + 10;
+        ctx.arc(x, y, Math.max(16, r), 0, Math.PI * 2);
         ctx.stroke();
       }
 

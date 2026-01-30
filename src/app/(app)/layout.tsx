@@ -3,13 +3,12 @@ import { ApprovalStatus } from "@prisma/client";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
-import TeamSlicer from "@/components/TeamSlicer";
 import Link from "next/link";
 import TopNav from "@/components/TopNav";
 import MobileAppHeader from "@/components/MobileAppHeader";
 import StatsFiltersProvider from "@/components/stats/StatsFiltersProvider";
 import TaktiktavleProvider from "@/components/taktiktavle/TaktiktavleProvider";
-import TaktiktavleSidebar from "@/components/taktiktavle/TaktiktavleSidebar";
+import AppSidebarContent from "@/components/AppSidebarContent";
 
 export default async function AppLayout({
   children,
@@ -61,14 +60,11 @@ export default async function AppLayout({
             ) : null}
             <span>Floorball</span>
           </Link>
-          <div className="mt-4">
-            <TeamSlicer
-              isAdmin={isAdmin}
-              teams={teams}
-              selectedTeamId={resolvedSelectedTeamId}
-            />
-          </div>
-          <TaktiktavleSidebar />
+          <AppSidebarContent
+            isAdmin={isAdmin}
+            teams={teams}
+            selectedTeamId={resolvedSelectedTeamId}
+          />
         </aside>
 
         {/* Right side: topbar starts AFTER sidebar */}

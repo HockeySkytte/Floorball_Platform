@@ -16,6 +16,8 @@ export type TaktikTool =
   | "arrow-dashed"
   | "arrow-wavy";
 
+export type LineMode = "straight" | "curve";
+
 type TaktiktavleUiState = {
   tool: TaktikTool;
   setTool: (t: TaktikTool) => void;
@@ -23,6 +25,10 @@ type TaktiktavleUiState = {
   setStrokeWidth: (n: number) => void;
   color: string;
   setColor: (c: string) => void;
+  lineMode: LineMode;
+  setLineMode: (m: LineMode) => void;
+  accessorySize: number;
+  setAccessorySize: (n: number) => void;
 };
 
 const Ctx = createContext<TaktiktavleUiState | null>(null);
@@ -31,10 +37,23 @@ export default function TaktiktavleProvider({ children }: { children: React.Reac
   const [tool, setTool] = useState<TaktikTool>("select");
   const [strokeWidth, setStrokeWidth] = useState(3);
   const [color, setColor] = useState("#111827");
+  const [lineMode, setLineMode] = useState<LineMode>("curve");
+  const [accessorySize, setAccessorySize] = useState(10);
 
   const value = useMemo(
-    () => ({ tool, setTool, strokeWidth, setStrokeWidth, color, setColor }),
-    [tool, strokeWidth, color]
+    () => ({
+      tool,
+      setTool,
+      strokeWidth,
+      setStrokeWidth,
+      color,
+      setColor,
+      lineMode,
+      setLineMode,
+      accessorySize,
+      setAccessorySize,
+    }),
+    [tool, strokeWidth, color, lineMode, accessorySize]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

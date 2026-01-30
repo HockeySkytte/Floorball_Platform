@@ -83,8 +83,12 @@ function AccessoryIcon({ type }: { type: "player" | "cone" | "ball" | "text" }) 
   if (type === "ball") {
     return (
       <svg width="34" height="16" viewBox="0 0 34 16" aria-hidden="true">
-        <circle cx="17" cy="8" r="4" fill="none" stroke="currentColor" strokeWidth="2" />
-        <circle cx="17" cy="8" r="1.5" fill="currentColor" />
+        <circle cx="17" cy="8" r="4.5" fill="white" stroke="currentColor" strokeWidth="2" />
+        <circle cx="17" cy="8" r="1.4" fill="rgba(0,0,0,0.18)" />
+        <circle cx="14.7" cy="6.4" r="0.9" fill="rgba(0,0,0,0.18)" />
+        <circle cx="19.3" cy="6.4" r="0.9" fill="rgba(0,0,0,0.18)" />
+        <circle cx="14.7" cy="9.6" r="0.9" fill="rgba(0,0,0,0.18)" />
+        <circle cx="19.3" cy="9.6" r="0.9" fill="rgba(0,0,0,0.18)" />
       </svg>
     );
   }
@@ -100,7 +104,18 @@ function AccessoryIcon({ type }: { type: "player" | "cone" | "ball" | "text" }) 
 export default function TaktiktavleSidebar() {
   const pathname = usePathname();
   const show = pathname === "/taktiktavle" || pathname.startsWith("/taktiktavle/");
-  const { tool, setTool, strokeWidth, setStrokeWidth, color, setColor } = useTaktiktavleUi();
+  const {
+    tool,
+    setTool,
+    strokeWidth,
+    setStrokeWidth,
+    color,
+    setColor,
+    lineMode,
+    setLineMode,
+    accessorySize,
+    setAccessorySize,
+  } = useTaktiktavleUi();
 
   if (!show) return null;
 
@@ -198,6 +213,30 @@ export default function TaktiktavleSidebar() {
 
       <div className="space-y-2">
         <div className="text-xs font-extrabold tracking-wide opacity-90">INDSTILLINGER</div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setLineMode("straight")}
+            className={
+              "rounded-md px-2 py-2 text-xs font-semibold transition " +
+              (lineMode === "straight" ? "bg-white/15" : "bg-white/5 hover:bg-white/10")
+            }
+          >
+            Lige
+          </button>
+          <button
+            type="button"
+            onClick={() => setLineMode("curve")}
+            className={
+              "rounded-md px-2 py-2 text-xs font-semibold transition " +
+              (lineMode === "curve" ? "bg-white/15" : "bg-white/5 hover:bg-white/10")
+            }
+          >
+            Kurve
+          </button>
+        </div>
+
         <label className="block text-xs font-semibold">
           <div className="mb-1 opacity-90">Farve</div>
           <input
@@ -220,10 +259,23 @@ export default function TaktiktavleSidebar() {
             className="w-full"
           />
         </label>
+
+        <label className="block text-xs font-semibold">
+          <div className="mb-1 opacity-90">Tilbehør størrelse: {accessorySize}</div>
+          <input
+            type="range"
+            min={6}
+            max={22}
+            step={1}
+            value={accessorySize}
+            onChange={(e) => setAccessorySize(Number(e.target.value))}
+            className="w-full"
+          />
+        </label>
       </div>
 
       <div className="rounded-md border border-white/15 bg-white/5 p-2 text-[11px] leading-4 opacity-90">
-        Tips: Brug mus/trackpad til at tegne. Vælg "Slet" og klik på et objekt for at fjerne det.
+        Tips: Klik for at tegne. Lige = 2 klik. Kurve = 3 klik. Vælg "Slet" og klik på et objekt for at fjerne det.
       </div>
     </div>
   );
