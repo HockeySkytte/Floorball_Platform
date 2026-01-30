@@ -198,6 +198,8 @@ function templateLabel(t: CanvasTemplate) {
 export default function TaktiktavleEditorClient() {
   const { tool, color, strokeWidth, lineMode, accessorySize } = useTaktiktavleUi();
 
+  const STORAGE_KEY = "taktiktavle:state:v1";
+
   const [doc, setDoc] = useState<DocumentState | null>(null);
   const [past, setPast] = useState<DocumentState[]>([]);
   const [future, setFuture] = useState<DocumentState[]>([]);
@@ -239,6 +241,42 @@ export default function TaktiktavleEditorClient() {
     if (!activeFrame || !selectedId) return null;
     return activeFrame.shapes.find((s) => s.id === selectedId) ?? null;
   }, [activeFrame, selectedId]);
+
+  // Restore last state when returning to the page
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as { doc?: DocumentState; activeFrameIndex?: number };
+      if (!parsed?.doc || !Array.isArray(parsed.doc.frames) || parsed.doc.frames.length === 0) return;
+      setDoc(parsed.doc);
+      setPast([]);
+      setFuture([]);
+      setActiveFrameIndex(Math.max(0, Math.min(parsed.activeFrameIndex ?? 0, parsed.doc.frames.length - 1)));
+      setIsPlaying(false);
+      setSelectedId(null);
+      setSelectOpen(false);
+    } catch {
+      // ignore
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persist state so navigation away/back keeps the current board
+  useEffect(() => {
+    try {
+      if (!doc) {
+        window.localStorage.removeItem(STORAGE_KEY);
+        return;
+      }
+      window.localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ doc, activeFrameIndex: Math.min(activeFrameIndex, doc.frames.length - 1) })
+      );
+    } catch {
+      // ignore
+    }
+  }, [doc, activeFrameIndex]);
 
   useEffect(() => {
     if (tool.startsWith("line-") || tool.startsWith("arrow-")) return;
@@ -345,6 +383,16 @@ export default function TaktiktavleEditorClient() {
   }
 
   function currentLineConfig(): { style: PathStyle; arrow: boolean } | null {
+    // For animations: paths are motion guides (not visuals)
+    // - only solid
+    // - no arrow heads
+    if (doc?.kind === "animation") {
+      if (tool.startsWith("line-") || tool.startsWith("arrow-")) {
+        return { style: "solid", arrow: false };
+      }
+      return null;
+    }
+
     if (tool.startsWith("line-")) {
       const s = tool.replace("line-", "") as PathStyle;
       return { style: s, arrow: false };
@@ -354,6 +402,23 @@ export default function TaktiktavleEditorClient() {
       return { style: s, arrow: true };
     }
     return null;
+  }
+
+  function positionOfAccessory(s: Shape): { x: number; y: number } | null {
+    if (s.type === "player" || s.type === "cone" || s.type === "ball" || s.type === "text") return { x: s.x, y: s.y };
+    return null;
+  }
+
+  function endPositionsForFrame(frame: Frame) {
+    const ends = new Map<string, { x: number; y: number }>();
+    for (const s of frame.shapes) {
+      if (s.type !== "path") continue;
+      const aid = s.attachId ?? null;
+      if (!aid) continue;
+      // If multiple paths exist for the same accessory, the last one wins.
+      ends.set(aid, { x: s.x2, y: s.y2 });
+    }
+    return ends;
   }
 
   function canvasPoint(ev: React.PointerEvent) {
@@ -511,18 +576,30 @@ export default function TaktiktavleEditorClient() {
 
     // First click = start
     if (!existing) {
-      const attachId = doc.kind === "animation" && selectedShape && selectedShape.type !== "path" ? selectedShape.id : null;
+      if (doc.kind === "animation") {
+        if (!selectedShape || selectedShape.type === "path") {
+          window.alert("Vælg en spiller/bold/kegle først, så linjen kan tilknyttes.");
+          return;
+        }
+      }
+
+      const attachId =
+        doc.kind === "animation" ? selectedShape!.id : selectedShape && selectedShape.type !== "path" ? selectedShape.id : null;
+
+      const start = doc.kind === "animation" && selectedShape ? positionOfAccessory(selectedShape) : null;
+      const x1 = start?.x ?? p.x;
+      const y1 = start?.y ?? p.y;
       draftRef.current = {
         id: uid(),
         type: "path",
         style: cfg.style,
         arrow: cfg.arrow,
-        x1: p.x,
-        y1: p.y,
-        cx: p.x,
-        cy: p.y,
-        x2: p.x,
-        y2: p.y,
+        x1,
+        y1,
+        cx: x1,
+        cy: y1,
+        x2: x1,
+        y2: y1,
         attachId,
         color,
         width: strokeWidth,
@@ -674,6 +751,25 @@ export default function TaktiktavleEditorClient() {
 
   function addFrame() {
     if (!doc) return;
+
+    if (doc.kind === "animation" && activeFrame) {
+      const endPos = endPositionsForFrame(activeFrame);
+      const carried = activeFrame.shapes
+        .filter((s) => s.type !== "path")
+        .map((s) => {
+          const end = endPos.get(s.id);
+          if (!end) return s;
+          if (s.type === "player" || s.type === "cone" || s.type === "ball" || s.type === "text") {
+            return { ...s, x: end.x, y: end.y };
+          }
+          return s;
+        });
+      applyMutation((d) => ({ ...d, frames: [...d.frames, { id: uid(), durationMs: 1500, shapes: carried }] }));
+      setActiveFrameIndex((i) => i + 1);
+      setSelectedId(null);
+      return;
+    }
+
     applyMutation((d) => ({ ...d, frames: [...d.frames, { id: uid(), durationMs: 1500, shapes: [] }] }));
     setActiveFrameIndex((i) => i + 1);
     setSelectedId(null);
@@ -768,9 +864,12 @@ export default function TaktiktavleEditorClient() {
       }
     }
 
-    // Draw paths first
+    const hidePaths = doc.kind === "animation" && isPlaying;
+
+    // Draw paths first (hidden during animation playback)
     for (const s of frame.shapes) {
       if (s.type !== "path") continue;
+      if (hidePaths) continue;
       ctx.save();
       ctx.strokeStyle = s.color;
       ctx.lineWidth = s.width;
@@ -884,6 +983,7 @@ export default function TaktiktavleEditorClient() {
     // Draft preview
     const draft = draftRef.current;
     if (draft && draft.type === "path") {
+      if (hidePaths) return;
       ctx.save();
       ctx.strokeStyle = draft.color;
       ctx.lineWidth = draft.width;
@@ -969,7 +1069,7 @@ export default function TaktiktavleEditorClient() {
   useEffect(() => {
     redraw(performance.now());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [containerSize.w, containerSize.h, doc?.template.crop, doc?.template.rotationDeg, activeFrameIndex, selectedId]);
+  }, [containerSize.w, containerSize.h, doc, activeFrameIndex, selectedId, isPlaying]);
 
   return (
     <div className="space-y-4">
