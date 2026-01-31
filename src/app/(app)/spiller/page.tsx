@@ -230,12 +230,23 @@ function LineChart({
   points: { xLabel: string; y: number }[];
   stroke?: string;
 }) {
+  const [isNarrow, setIsNarrow] = useState(false);
+  useEffect(() => {
+    const onResize = () => setIsNarrow(window.innerWidth < 640);
+    onResize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
   const width = 520;
-  const height = 220;
-  const padL = 46;
+  const height = isNarrow ? 270 : 230;
+  const padL = isNarrow ? 62 : 52;
   const padR = 10;
-  const padT = 10;
-  const padB = 30;
+  const padT = 12;
+  const padB = isNarrow ? 48 : 40;
+
+  const yTickFontSize = isNarrow ? 16 : 14;
+  const xTickFontSize = isNarrow ? 15 : 13;
 
   const minY = 1;
   const maxY = 10;
@@ -256,7 +267,7 @@ function LineChart({
       {[1, 3, 5, 7, 9].map((y) => (
         <g key={y}>
           <line x1={padL} y1={toY(y)} x2={width - padR} y2={toY(y)} stroke="#f4f4f5" />
-          <text x={padL - 8} y={toY(y)} fontSize={12} textAnchor="end" dominantBaseline="middle" fill="#71717a">
+          <text x={padL - 10} y={toY(y)} fontSize={yTickFontSize} textAnchor="end" dominantBaseline="middle" fill="#71717a">
             {y}
           </text>
         </g>
@@ -275,7 +286,7 @@ function LineChart({
             key={`x-${i}`}
             x={toX(i)}
             y={height - 10}
-            fontSize={12}
+            fontSize={xTickFontSize}
             textAnchor="middle"
             fill="#71717a"
           >
@@ -303,13 +314,24 @@ function MultiLineChart({
   yDomain: { min: number; max: number } | null;
   formatY: (v: number) => string;
 }) {
+  const [isNarrow, setIsNarrow] = useState(false);
+  useEffect(() => {
+    const onResize = () => setIsNarrow(window.innerWidth < 640);
+    onResize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
   const width = 720;
-  const height = 280;
-  const padL = 46;
+  const height = isNarrow ? 360 : 300;
+  const padL = isNarrow ? 66 : 54;
   const padR = 12;
-  const padT = 14;
-  const padB = 36;
+  const padT = 16;
+  const padB = isNarrow ? 54 : 44;
   const xInset = 18;
+
+  const yTickFontSize = isNarrow ? 14 : 12;
+  const xTickFontSize = isNarrow ? 13 : 11;
 
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [hoverPos, setHoverPos] = useState<{ x: number; y: number } | null>(null);
@@ -364,7 +386,7 @@ function MultiLineChart({
         {ticks.map((v, i) => (
           <g key={i}>
             <line x1={padL} y1={toY(v)} x2={width - padR} y2={toY(v)} stroke="#f4f4f5" />
-            <text x={padL - 8} y={toY(v)} fontSize={10} textAnchor="end" dominantBaseline="middle" fill="#71717a">
+            <text x={padL - 10} y={toY(v)} fontSize={yTickFontSize} textAnchor="end" dominantBaseline="middle" fill="#71717a">
               {formatY(v)}
             </text>
           </g>
@@ -416,7 +438,7 @@ function MultiLineChart({
         {xLabels.map((lbl, i) => {
           if (xLabels.length > 10 && i % 2 === 1) return null;
           return (
-            <text key={i} x={toX(i, xLabels.length)} y={height - 10} fontSize={10} textAnchor="middle" fill="#71717a">
+            <text key={i} x={toX(i, xLabels.length)} y={height - 12} fontSize={xTickFontSize} textAnchor="middle" fill="#71717a">
               {lbl}
             </text>
           );
@@ -450,7 +472,7 @@ function MultiLineChart({
         </div>
       ) : null}
 
-      <div className="mt-2 flex flex-wrap gap-3 text-xs text-zinc-700">
+      <div className="mt-2 flex flex-wrap gap-3 text-sm md:text-xs text-zinc-700">
         {series.map((s) => (
           <div key={s.key} className="inline-flex items-center gap-2">
             <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: s.color }} />
@@ -513,7 +535,14 @@ export default function SpillerPage() {
     try {
       const meRes = await fetch("/api/auth/me", { cache: "no-store" });
       const meData = (await meRes.json().catch(() => ({}))) as AuthMeResponse;
-      setMe(meData?.user ?? null);
+      const nextMe = meData?.user ?? null;
+      setMe(nextMe);
+
+      if (nextMe?.role === "SUPPORTER") {
+        setError("Du har ikke adgang til Spiller-siden.");
+        router.replace("/statistik");
+        return;
+      }
 
       const playersRes = await fetch("/api/player/players", { cache: "no-store" });
       const playersData = (await playersRes.json().catch(() => ({}))) as PlayersResponse;

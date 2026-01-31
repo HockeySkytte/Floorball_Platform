@@ -833,7 +833,7 @@ function HeatHalfRink({
 }
 
 export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
-  const [tab, setTab] = useState<TabKey>("events");
+  const [tab, setTab] = useState<TabKey>(isLeader ? "events" : "shotmap");
 
   type TablesTabKey = "players-individual" | "players-onice" | "goalies" | "team";
   const [tablesTab, setTablesTab] = useState<TablesTabKey>("players-individual");
@@ -861,16 +861,20 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
 
   const [uploading, setUploading] = useState<"EVENTS" | "PLAYERS" | null>(null);
 
-  const tabs = useMemo(
-    () =>
-      [
-        { key: "events" as const, label: "Events" },
-        { key: "shotmap" as const, label: "Shot Map" },
-        { key: "heatmap" as const, label: "Heat Map" },
-        { key: "tabeller" as const, label: "Tabeller" },
-      ],
-    []
-  );
+  const tabs = useMemo(() => {
+    const list = [
+      ...(isLeader ? ([{ key: "events" as const, label: "Events" }] as const) : ([] as const)),
+      { key: "shotmap" as const, label: "Shot Map" },
+      { key: "heatmap" as const, label: "Heat Map" },
+      { key: "tabeller" as const, label: "Tabeller" },
+    ];
+    return list;
+  }, [isLeader]);
+
+  useEffect(() => {
+    if (isLeader) return;
+    if (tab === "events") setTab("shotmap");
+  }, [isLeader, tab]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1939,22 +1943,11 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
           ) : shotMapEvents.length === 0 ? (
             <p className="mt-4 text-sm text-zinc-600">Ingen events.</p>
           ) : (
-            <div className="mt-4 grid gap-2 md:grid-cols-[minmax(0,1fr)_180px_minmax(0,1fr)] md:items-stretch">
-              <HalfRink
-                title="Defensive End"
-                half="left"
-                events={shotMapEvents}
-                selectedTeam={String(filters.perspektiv ?? "").trim()}
-                flipByPeriod={shotMapFlipByPeriod}
-                teamColors={teamColors}
-                selectedEventIds={selectedShotEventIdSet}
-                onToggleEvent={toggleShotEvent}
-                onSetSelection={setShotSelection}
-              />
-
-              <div className="flex h-full flex-col justify-between gap-2">
+            <>
+              {/* Mobile: KPI cards above both ends; ends stack (portrait) or sit side-by-side (landscape). */}
+              <div className="mt-4 space-y-2 md:hidden">
                 {shotMapKpis ? (
-                  <>
+                  <div className="grid gap-2 sm:grid-cols-2">
                     <KpiCard
                       title="Corsi"
                       leftLabel="CA"
@@ -1964,7 +1957,6 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
                       midValue={String(pct(shotMapKpis.corsi.cfPct))}
                       rightValue={String(shotMapKpis.corsi.cf)}
                       midBg={colorScaleRedWhiteBlue(shotMapKpis.corsi.cfPct, 20, 50, 80)}
-                      className="flex-1"
                     />
                     <KpiCard
                       title="Fenwick"
@@ -1975,7 +1967,6 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
                       midValue={String(pct(shotMapKpis.fenwick.ffPct))}
                       rightValue={String(shotMapKpis.fenwick.ff)}
                       midBg={colorScaleRedWhiteBlue(shotMapKpis.fenwick.ffPct, 20, 50, 80)}
-                      className="flex-1"
                     />
                     <KpiCard
                       title="Shots"
@@ -1986,7 +1977,6 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
                       midValue={String(pct(shotMapKpis.shots.sfPct))}
                       rightValue={String(shotMapKpis.shots.sf)}
                       midBg={colorScaleRedWhiteBlue(shotMapKpis.shots.sfPct, 20, 50, 80)}
-                      className="flex-1"
                     />
                     <KpiCard
                       title="Goals"
@@ -1997,7 +1987,6 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
                       midValue={String(pct(shotMapKpis.goals.gfPct))}
                       rightValue={String(shotMapKpis.goals.gf)}
                       midBg={colorScaleRedWhiteBlue(shotMapKpis.goals.gfPct, 20, 50, 80)}
-                      className="flex-1"
                     />
                     <KpiCard
                       title="Shooting / Goaltending"
@@ -2008,24 +1997,127 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
                       midValue={String(pct(shotMapKpis.sg.pdo))}
                       rightValue={String(pct(shotMapKpis.sg.shPct))}
                       midBg={colorScaleRedWhiteBlue(shotMapKpis.sg.pdo, 90, 100, 110)}
-                      className="flex-1"
+                      className="sm:col-span-2"
                     />
-                  </>
+                  </div>
                 ) : null}
+
+                <div className="grid gap-2 landscape:grid-cols-2">
+                  <HalfRink
+                    title="Defensive End"
+                    half="left"
+                    events={shotMapEvents}
+                    selectedTeam={String(filters.perspektiv ?? "").trim()}
+                    flipByPeriod={shotMapFlipByPeriod}
+                    teamColors={teamColors}
+                    selectedEventIds={selectedShotEventIdSet}
+                    onToggleEvent={toggleShotEvent}
+                    onSetSelection={setShotSelection}
+                  />
+
+                  <HalfRink
+                    title="Offensive End"
+                    half="right"
+                    events={shotMapEvents}
+                    selectedTeam={String(filters.perspektiv ?? "").trim()}
+                    flipByPeriod={shotMapFlipByPeriod}
+                    teamColors={teamColors}
+                    selectedEventIds={selectedShotEventIdSet}
+                    onToggleEvent={toggleShotEvent}
+                    onSetSelection={setShotSelection}
+                  />
+                </div>
               </div>
 
-              <HalfRink
-                title="Offensive End"
-                half="right"
-                events={shotMapEvents}
-                selectedTeam={String(filters.perspektiv ?? "").trim()}
-                flipByPeriod={shotMapFlipByPeriod}
-                teamColors={teamColors}
-                selectedEventIds={selectedShotEventIdSet}
-                onToggleEvent={toggleShotEvent}
-                onSetSelection={setShotSelection}
-              />
-            </div>
+              {/* Desktop: keep current layout (defensive • KPI stack • offensive). */}
+              <div className="mt-4 hidden gap-2 md:grid md:grid-cols-[minmax(0,1fr)_180px_minmax(0,1fr)] md:items-stretch">
+                <HalfRink
+                  title="Defensive End"
+                  half="left"
+                  events={shotMapEvents}
+                  selectedTeam={String(filters.perspektiv ?? "").trim()}
+                  flipByPeriod={shotMapFlipByPeriod}
+                  teamColors={teamColors}
+                  selectedEventIds={selectedShotEventIdSet}
+                  onToggleEvent={toggleShotEvent}
+                  onSetSelection={setShotSelection}
+                />
+
+                <div className="flex h-full flex-col justify-between gap-2">
+                  {shotMapKpis ? (
+                    <>
+                      <KpiCard
+                        title="Corsi"
+                        leftLabel="CA"
+                        midLabel="CF%"
+                        rightLabel="CF"
+                        leftValue={String(shotMapKpis.corsi.ca)}
+                        midValue={String(pct(shotMapKpis.corsi.cfPct))}
+                        rightValue={String(shotMapKpis.corsi.cf)}
+                        midBg={colorScaleRedWhiteBlue(shotMapKpis.corsi.cfPct, 20, 50, 80)}
+                        className="flex-1"
+                      />
+                      <KpiCard
+                        title="Fenwick"
+                        leftLabel="FA"
+                        midLabel="FF%"
+                        rightLabel="FF"
+                        leftValue={String(shotMapKpis.fenwick.fa)}
+                        midValue={String(pct(shotMapKpis.fenwick.ffPct))}
+                        rightValue={String(shotMapKpis.fenwick.ff)}
+                        midBg={colorScaleRedWhiteBlue(shotMapKpis.fenwick.ffPct, 20, 50, 80)}
+                        className="flex-1"
+                      />
+                      <KpiCard
+                        title="Shots"
+                        leftLabel="SA"
+                        midLabel="SF%"
+                        rightLabel="SF"
+                        leftValue={String(shotMapKpis.shots.sa)}
+                        midValue={String(pct(shotMapKpis.shots.sfPct))}
+                        rightValue={String(shotMapKpis.shots.sf)}
+                        midBg={colorScaleRedWhiteBlue(shotMapKpis.shots.sfPct, 20, 50, 80)}
+                        className="flex-1"
+                      />
+                      <KpiCard
+                        title="Goals"
+                        leftLabel="GA"
+                        midLabel="GF%"
+                        rightLabel="GF"
+                        leftValue={String(shotMapKpis.goals.ga)}
+                        midValue={String(pct(shotMapKpis.goals.gfPct))}
+                        rightValue={String(shotMapKpis.goals.gf)}
+                        midBg={colorScaleRedWhiteBlue(shotMapKpis.goals.gfPct, 20, 50, 80)}
+                        className="flex-1"
+                      />
+                      <KpiCard
+                        title="Shooting / Goaltending"
+                        leftLabel="Sv%"
+                        midLabel="PDO"
+                        rightLabel="Sh%"
+                        leftValue={String(pct(shotMapKpis.sg.svPct))}
+                        midValue={String(pct(shotMapKpis.sg.pdo))}
+                        rightValue={String(pct(shotMapKpis.sg.shPct))}
+                        midBg={colorScaleRedWhiteBlue(shotMapKpis.sg.pdo, 90, 100, 110)}
+                        className="flex-1"
+                      />
+                    </>
+                  ) : null}
+                </div>
+
+                <HalfRink
+                  title="Offensive End"
+                  half="right"
+                  events={shotMapEvents}
+                  selectedTeam={String(filters.perspektiv ?? "").trim()}
+                  flipByPeriod={shotMapFlipByPeriod}
+                  teamColors={teamColors}
+                  selectedEventIds={selectedShotEventIdSet}
+                  onToggleEvent={toggleShotEvent}
+                  onSetSelection={setShotSelection}
+                />
+              </div>
+            </>
           )}
 
           <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-zinc-700">
@@ -2078,20 +2170,11 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
           ) : !zones ? (
             <p className="mt-4 text-sm text-zinc-600">Indlæser zoner…</p>
           ) : (
-            <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_180px_minmax(0,1fr)] md:items-stretch">
-              <HeatHalfRink
-                title="Defensive End"
-                half="left"
-                zones={zones}
-                fillByZoneId={heatmap.fillByZoneId}
-                labelByZoneId={heatmap.labelByZoneId}
-                selectedZoneCode={selectedZoneCode}
-                onSelectZone={onSelectZone}
-              />
-
-              <div className="flex h-full flex-col justify-between gap-2">
+            <>
+              {/* Mobile: KPI cards above both ends; ends stack (portrait) or sit side-by-side (landscape). */}
+              <div className="space-y-2 md:hidden">
                 {heatmapKpis ? (
-                  <>
+                  <div className="grid gap-2 sm:grid-cols-2">
                     <KpiCard
                       title="Corsi"
                       leftLabel="CA"
@@ -2101,7 +2184,6 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
                       midValue={String(pct(heatmapKpis.corsi.cfPct))}
                       rightValue={String(heatmapKpis.corsi.cf)}
                       midBg={colorScaleRedWhiteBlue(heatmapKpis.corsi.cfPct, 20, 50, 80)}
-                      className="flex-1"
                     />
                     <KpiCard
                       title="Fenwick"
@@ -2112,7 +2194,6 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
                       midValue={String(pct(heatmapKpis.fenwick.ffPct))}
                       rightValue={String(heatmapKpis.fenwick.ff)}
                       midBg={colorScaleRedWhiteBlue(heatmapKpis.fenwick.ffPct, 20, 50, 80)}
-                      className="flex-1"
                     />
                     <KpiCard
                       title="Shots"
@@ -2123,7 +2204,6 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
                       midValue={String(pct(heatmapKpis.shots.sfPct))}
                       rightValue={String(heatmapKpis.shots.sf)}
                       midBg={colorScaleRedWhiteBlue(heatmapKpis.shots.sfPct, 20, 50, 80)}
-                      className="flex-1"
                     />
                     <KpiCard
                       title="Goals"
@@ -2134,7 +2214,6 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
                       midValue={String(pct(heatmapKpis.goals.gfPct))}
                       rightValue={String(heatmapKpis.goals.gf)}
                       midBg={colorScaleRedWhiteBlue(heatmapKpis.goals.gfPct, 20, 50, 80)}
-                      className="flex-1"
                     />
                     <KpiCard
                       title="Shooting / Goaltending"
@@ -2145,22 +2224,119 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
                       midValue={String(pct(heatmapKpis.sg.pdo))}
                       rightValue={String(pct(heatmapKpis.sg.shPct))}
                       midBg={colorScaleRedWhiteBlue(heatmapKpis.sg.pdo, 90, 100, 110)}
-                      className="flex-1"
+                      className="sm:col-span-2"
                     />
-                  </>
+                  </div>
                 ) : null}
+
+                <div className="grid gap-2 landscape:grid-cols-2">
+                  <HeatHalfRink
+                    title="Defensive End"
+                    half="left"
+                    zones={zones}
+                    fillByZoneId={heatmap.fillByZoneId}
+                    labelByZoneId={heatmap.labelByZoneId}
+                    selectedZoneCode={selectedZoneCode}
+                    onSelectZone={onSelectZone}
+                  />
+
+                  <HeatHalfRink
+                    title="Offensive End"
+                    half="right"
+                    zones={zones}
+                    fillByZoneId={heatmap.fillByZoneId}
+                    labelByZoneId={heatmap.labelByZoneId}
+                    selectedZoneCode={selectedZoneCode}
+                    onSelectZone={onSelectZone}
+                  />
+                </div>
               </div>
 
-              <HeatHalfRink
-                title="Offensive End"
-                half="right"
-                zones={zones}
-                fillByZoneId={heatmap.fillByZoneId}
-                labelByZoneId={heatmap.labelByZoneId}
-                selectedZoneCode={selectedZoneCode}
-                onSelectZone={onSelectZone}
-              />
-            </div>
+              {/* Desktop: keep current layout (defensive • KPI stack • offensive). */}
+              <div className="hidden gap-2 md:grid md:grid-cols-[minmax(0,1fr)_180px_minmax(0,1fr)] md:items-stretch">
+                <HeatHalfRink
+                  title="Defensive End"
+                  half="left"
+                  zones={zones}
+                  fillByZoneId={heatmap.fillByZoneId}
+                  labelByZoneId={heatmap.labelByZoneId}
+                  selectedZoneCode={selectedZoneCode}
+                  onSelectZone={onSelectZone}
+                />
+
+                <div className="flex h-full flex-col justify-between gap-2">
+                  {heatmapKpis ? (
+                    <>
+                      <KpiCard
+                        title="Corsi"
+                        leftLabel="CA"
+                        midLabel="CF%"
+                        rightLabel="CF"
+                        leftValue={String(heatmapKpis.corsi.ca)}
+                        midValue={String(pct(heatmapKpis.corsi.cfPct))}
+                        rightValue={String(heatmapKpis.corsi.cf)}
+                        midBg={colorScaleRedWhiteBlue(heatmapKpis.corsi.cfPct, 20, 50, 80)}
+                        className="flex-1"
+                      />
+                      <KpiCard
+                        title="Fenwick"
+                        leftLabel="FA"
+                        midLabel="FF%"
+                        rightLabel="FF"
+                        leftValue={String(heatmapKpis.fenwick.fa)}
+                        midValue={String(pct(heatmapKpis.fenwick.ffPct))}
+                        rightValue={String(heatmapKpis.fenwick.ff)}
+                        midBg={colorScaleRedWhiteBlue(heatmapKpis.fenwick.ffPct, 20, 50, 80)}
+                        className="flex-1"
+                      />
+                      <KpiCard
+                        title="Shots"
+                        leftLabel="SA"
+                        midLabel="SF%"
+                        rightLabel="SF"
+                        leftValue={String(heatmapKpis.shots.sa)}
+                        midValue={String(pct(heatmapKpis.shots.sfPct))}
+                        rightValue={String(heatmapKpis.shots.sf)}
+                        midBg={colorScaleRedWhiteBlue(heatmapKpis.shots.sfPct, 20, 50, 80)}
+                        className="flex-1"
+                      />
+                      <KpiCard
+                        title="Goals"
+                        leftLabel="GA"
+                        midLabel="GF%"
+                        rightLabel="GF"
+                        leftValue={String(heatmapKpis.goals.ga)}
+                        midValue={String(pct(heatmapKpis.goals.gfPct))}
+                        rightValue={String(heatmapKpis.goals.gf)}
+                        midBg={colorScaleRedWhiteBlue(heatmapKpis.goals.gfPct, 20, 50, 80)}
+                        className="flex-1"
+                      />
+                      <KpiCard
+                        title="Shooting / Goaltending"
+                        leftLabel="Sv%"
+                        midLabel="PDO"
+                        rightLabel="Sh%"
+                        leftValue={String(pct(heatmapKpis.sg.svPct))}
+                        midValue={String(pct(heatmapKpis.sg.pdo))}
+                        rightValue={String(pct(heatmapKpis.sg.shPct))}
+                        midBg={colorScaleRedWhiteBlue(heatmapKpis.sg.pdo, 90, 100, 110)}
+                        className="flex-1"
+                      />
+                    </>
+                  ) : null}
+                </div>
+
+                <HeatHalfRink
+                  title="Offensive End"
+                  half="right"
+                  zones={zones}
+                  fillByZoneId={heatmap.fillByZoneId}
+                  labelByZoneId={heatmap.labelByZoneId}
+                  selectedZoneCode={selectedZoneCode}
+                  onSelectZone={onSelectZone}
+                />
+              </div>
+            </>
           )}
 
           <VideoSection title="Video" events={heatmapSelectedEvents} />

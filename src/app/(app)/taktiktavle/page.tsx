@@ -1,5 +1,5 @@
-import TaktiktavleEditorClient from "@/components/taktiktavle/TaktiktavleEditorClient";
+import TaktiktavleGateClient from "./TaktiktavleGateClient";
 
 export default function TaktiktavlePage() {
-  return <TaktiktavleEditorClient />;
+  return <TaktiktavleGateClient />;
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import Link from "next/link";
 
 export type TopNavUser = {
@@ -17,6 +18,15 @@ export default function TopNav({
   leaderPendingCount?: number;
   adminPendingLeadersCount?: number;
 }) {
+  const mobileMenuRef = useRef<HTMLDetailsElement | null>(null);
+  const userMenuRef = useRef<HTMLDetailsElement | null>(null);
+
+  function closeDetails(ref: React.RefObject<HTMLDetailsElement | null>) {
+    const el = ref.current;
+    if (!el) return;
+    el.open = false;
+  }
+
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
     window.location.href = "/login";
@@ -44,12 +54,6 @@ export default function TopNav({
             </a>
             <Link className="hover:underline" href="/kampe">
               Kampe
-            </Link>
-            <Link className="hover:underline" href="/playbook">
-              Playbook
-            </Link>
-            <Link className="hover:underline" href="/oevelser">
-              Øvelser
             </Link>
             <Link className="hover:underline" href="/spiller">
               Spiller
@@ -83,16 +87,24 @@ export default function TopNav({
           </nav>
 
           {/* Mobile dropdown */}
-          <details className="relative sm:hidden">
+          <details ref={mobileMenuRef} className="relative sm:hidden">
             <summary className="cursor-pointer select-none rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm">
               Menu
             </summary>
             <div className="absolute left-0 z-50 mt-2 w-56 rounded-md border border-zinc-200 bg-white p-2 text-sm shadow-sm">
               <div className="flex flex-col">
-                <Link className="rounded px-2 py-1 hover:bg-zinc-50" href="/statistik">
+                <Link
+                  className="rounded px-2 py-1 hover:bg-zinc-50"
+                  href="/statistik"
+                  onClick={() => closeDetails(mobileMenuRef)}
+                >
                   Statistik
                 </Link>
-                <Link className="rounded px-2 py-1 hover:bg-zinc-50" href="/taktiktavle">
+                <Link
+                  className="rounded px-2 py-1 hover:bg-zinc-50"
+                  href="/taktiktavle"
+                  onClick={() => closeDetails(mobileMenuRef)}
+                >
                   Taktiktavle
                 </Link>
                 <a
@@ -100,24 +112,31 @@ export default function TopNav({
                   href="https://sports-tagging.netlify.app/floorball/"
                   target="_blank"
                   rel="noreferrer"
+                  onClick={() => closeDetails(mobileMenuRef)}
                 >
                   Shot Plotter
                 </a>
-                <Link className="rounded px-2 py-1 hover:bg-zinc-50" href="/kampe">
+                <Link
+                  className="rounded px-2 py-1 hover:bg-zinc-50"
+                  href="/kampe"
+                  onClick={() => closeDetails(mobileMenuRef)}
+                >
                   Kampe
                 </Link>
-                <Link className="rounded px-2 py-1 hover:bg-zinc-50" href="/playbook">
-                  Playbook
-                </Link>
-                <Link className="rounded px-2 py-1 hover:bg-zinc-50" href="/oevelser">
-                  Øvelser
-                </Link>
-                <Link className="rounded px-2 py-1 hover:bg-zinc-50" href="/spiller">
+                <Link
+                  className="rounded px-2 py-1 hover:bg-zinc-50"
+                  href="/spiller"
+                  onClick={() => closeDetails(mobileMenuRef)}
+                >
                   Spiller
                 </Link>
 
                 {user?.isAdmin ? (
-                  <Link className="rounded px-2 py-1 hover:bg-zinc-50" href="/admin">
+                  <Link
+                    className="rounded px-2 py-1 hover:bg-zinc-50"
+                    href="/admin"
+                    onClick={() => closeDetails(mobileMenuRef)}
+                  >
                     <span className="flex items-center justify-between gap-3">
                       <span>Admin</span>
                       {(adminPendingLeadersCount ?? 0) > 0 ? (
@@ -130,7 +149,11 @@ export default function TopNav({
                 ) : null}
 
                 {user?.teamRole === "LEADER" ? (
-                  <Link className="rounded px-2 py-1 hover:bg-zinc-50" href="/leder">
+                  <Link
+                    className="rounded px-2 py-1 hover:bg-zinc-50"
+                    href="/leder"
+                    onClick={() => closeDetails(mobileMenuRef)}
+                  >
                     <span className="flex items-center justify-between gap-3">
                       <span>Leder</span>
                       {(leaderPendingCount ?? 0) > 0 ? (
@@ -152,7 +175,11 @@ export default function TopNav({
                     >
                       Log ud
                     </button>
-                    <Link className="rounded px-2 py-1 hover:bg-zinc-50" href="/tilfoej-rolle">
+                    <Link
+                      className="rounded px-2 py-1 hover:bg-zinc-50"
+                      href="/tilfoej-rolle"
+                      onClick={() => closeDetails(mobileMenuRef)}
+                    >
                       Tilføj Rolle
                     </Link>
                   </>
@@ -164,18 +191,25 @@ export default function TopNav({
 
         <div className="flex items-center gap-3 text-base">
           {user ? (
-            <details className="relative">
+            <details ref={userMenuRef} className="relative">
               <summary className="cursor-pointer list-none font-medium select-none">
                 {user.username}
               </summary>
               <div className="absolute right-0 z-50 mt-2 w-44 rounded-md border border-zinc-200 bg-white p-2 text-sm text-zinc-900 shadow-sm">
                 <div className="flex flex-col">
-                  <Link className="rounded px-2 py-1 hover:bg-zinc-50" href="/tilfoej-rolle">
+                  <Link
+                    className="rounded px-2 py-1 hover:bg-zinc-50"
+                    href="/tilfoej-rolle"
+                    onClick={() => closeDetails(userMenuRef)}
+                  >
                     Tilføj Rolle
                   </Link>
                   <button
                     type="button"
-                    onClick={logout}
+                    onClick={() => {
+                      closeDetails(userMenuRef);
+                      void logout();
+                    }}
                     className="rounded px-2 py-1 text-left hover:bg-zinc-50"
                   >
                     Log ud

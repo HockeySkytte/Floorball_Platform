@@ -181,7 +181,7 @@ function drawWavyQuad(
     const nx = -d.dy / len;
     const ny = d.dx / len;
     const phase = (t * Math.hypot(x2 - x1, y2 - y1) * (2 * Math.PI)) / Math.max(1, waveLen);
-    const off = Math.sin(phase) * amp;
+    const off = i === 0 || i === steps ? 0 : Math.sin(phase) * amp;
     const xx = p.x + nx * off;
     const yy = p.y + ny * off;
     if (i === 0) ctx.moveTo(xx, yy);
@@ -502,6 +502,22 @@ export default function TaktiktavleEditorClient() {
   function onPointerDown(ev: React.PointerEvent) {
     if (!doc || !activeFrame) return;
     const p = canvasPoint(ev);
+
+    // Right click = select/mark without switching tools
+    if (ev.button === 2) {
+      ev.preventDefault();
+      let hit: Shape | null = null;
+      for (let i = activeFrame.shapes.length - 1; i >= 0; i--) {
+        const s = activeFrame.shapes[i]!;
+        if (hitTest(s, p.x, p.y)) {
+          hit = s;
+          break;
+        }
+      }
+      setSelectedId(hit?.id ?? null);
+      requestAnimationFrame(() => redraw(performance.now()));
+      return;
+    }
 
     // Eraser
     if (tool === "eraser") {
@@ -1091,6 +1107,7 @@ export default function TaktiktavleEditorClient() {
 
       if (s.arrow) {
         const d = derivOnQuad(s.x1, s.y1, s.cx, s.cy, s.x2, s.y2, 0.995);
+        ctx.setLineDash([]);
         drawArrowHead(ctx, s.x2, s.y2, d.dx, d.dy);
       }
 
@@ -1204,6 +1221,7 @@ export default function TaktiktavleEditorClient() {
       }
       if (draft.arrow) {
         const d = derivOnQuad(draft.x1, draft.y1, draft.cx, draft.cy, draft.x2, draft.y2, 0.995);
+        ctx.setLineDash([]);
         drawArrowHead(ctx, draft.x2, draft.y2, d.dx, d.dy);
       }
       ctx.restore();
@@ -1497,6 +1515,7 @@ export default function TaktiktavleEditorClient() {
         <canvas
           ref={canvasRef}
           className="block w-full"
+          onContextMenu={(e) => e.preventDefault()}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}

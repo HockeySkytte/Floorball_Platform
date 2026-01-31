@@ -75,6 +75,7 @@ type TeamTestDetail = {
 };
 
 export default function LeaderPage() {
+  const SHOW_PLAYBOOK = false;
   type TabKey = "members" | "matches" | "playbook" | "tests";
   const [tab, setTab] = useState<TabKey>("members");
 
@@ -774,16 +775,18 @@ export default function LeaderPage() {
           Kampe
         </button>
 
-        <button
-          type="button"
-          onClick={() => setTab("playbook")}
-          className={
-            "rounded-md px-3 py-2 text-sm font-semibold " +
-            (tab === "playbook" ? "bg-zinc-900 text-white" : "border border-zinc-300 bg-white")
-          }
-        >
-          Playbook
-        </button>
+        {SHOW_PLAYBOOK ? (
+          <button
+            type="button"
+            onClick={() => setTab("playbook")}
+            className={
+              "rounded-md px-3 py-2 text-sm font-semibold " +
+              (tab === "playbook" ? "bg-zinc-900 text-white" : "border border-zinc-300 bg-white")
+            }
+          >
+            Playbook
+          </button>
+        ) : null}
 
         <button
           type="button"
@@ -1023,7 +1026,7 @@ export default function LeaderPage() {
 
       ) : null}
 
-      {tab === "playbook" ? (
+      {SHOW_PLAYBOOK && tab === "playbook" ? (
         <section className="rounded-md border bg-white p-4">
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-lg font-semibold">Playbook</h2>

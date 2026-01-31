@@ -104,6 +104,7 @@ export default function VideoSection({
   const [afterSec, setAfterSec] = useState<number>(5);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [playAll, setPlayAll] = useState(false);
+  const [playRequested, setPlayRequested] = useState(false);
   const [apiReady, setApiReady] = useState(false);
   const playerHostRef = useRef<HTMLDivElement | null>(null);
   const playerRef = useRef<any>(null);
@@ -168,6 +169,18 @@ export default function VideoSection({
   useEffect(() => {
     if (!apiReady) return;
 
+    // No autoplay: only load/play after an explicit user action.
+    if (!playRequested) {
+      if (playerRef.current) {
+        try {
+          playerRef.current.stopVideo();
+        } catch {
+          // ignore
+        }
+      }
+      return;
+    }
+
     const YT = (window as any).YT;
     if (!YT?.Player) return;
 
@@ -198,7 +211,7 @@ export default function VideoSection({
       playerRef.current = new YT.Player(playerHostRef.current, {
         videoId: next.ytId,
         playerVars: {
-          autoplay: 1,
+          autoplay: 0,
           start: next.start,
           end: next.end,
           rel: 0,
@@ -250,7 +263,7 @@ export default function VideoSection({
         // ignore
       }
     }
-  }, [apiReady, selectedRow, playAll]);
+  }, [apiReady, playRequested, selectedRow, playAll]);
 
   useEffect(() => {
     return () => {
@@ -304,6 +317,7 @@ export default function VideoSection({
                 selectedIndex !== null && rows[selectedIndex]?.playable ? selectedIndex : findFirstPlayableIndex();
               if (start === null) return;
               setSelectedIndex(start);
+              setPlayRequested(true);
               setPlayAll(true);
             }}
           >
@@ -313,7 +327,16 @@ export default function VideoSection({
             <button
               type="button"
               className="rounded-md border border-[color:var(--surface-border)] px-3 py-1.5 text-sm"
-              onClick={() => setPlayAll(false)}
+              onClick={() => {
+                setPlayAll(false);
+                if (playerRef.current) {
+                  try {
+                    playerRef.current.stopVideo();
+                  } catch {
+                    // ignore
+                  }
+                }
+              }}
             >
               Stop
             </button>
@@ -324,10 +347,14 @@ export default function VideoSection({
       <div className={showTable ? "grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] md:items-start" : "space-y-2"}>
         <div className="space-y-2">
           <div className="aspect-video w-full overflow-hidden rounded-md bg-black/90">
-            {selectedRow?.playable ? (
+            {playRequested && selectedRow?.playable ? (
               <div ref={playerHostRef} className="h-full w-full" />
             ) : rows.length === 0 ? (
               <div className="grid h-full w-full place-items-center text-sm text-white/70">Ingen events.</div>
+            ) : selectedRow?.playable ? (
+              <div className="grid h-full w-full place-items-center text-sm text-white/70">
+                {showTable ? "Tryk på Afspil Alle eller vælg et event." : "Tryk på Afspil Alle for at starte."}
+              </div>
             ) : (
               <div className="grid h-full w-full place-items-center text-sm text-white/70">Vælg et event med video.</div>
             )}
@@ -362,6 +389,7 @@ export default function VideoSection({
                       }
                       onClick={() => {
                         if (!r.playable) return;
+                        setPlayRequested(true);
                         setPlayAll(false);
                         setSelectedIndex(idx);
                       }}

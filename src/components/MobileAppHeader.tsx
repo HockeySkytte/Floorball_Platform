@@ -42,6 +42,10 @@ export default function MobileAppHeader({
     window.location.href = "/login";
   }
 
+  function closeMenu() {
+    setMenuOpen(false);
+  }
+
   function toggleMenu() {
     setMenuOpen((v) => {
       const next = !v;
@@ -106,26 +110,33 @@ export default function MobileAppHeader({
           <div className="mt-5 px-4 pb-4">
             <div className="overflow-hidden rounded-xl border border-white/15 bg-white/5">
               <nav className="divide-y divide-white/10">
-                <Link className="block px-4 py-4 text-lg font-semibold" href="/statistik">
+                <Link
+                  className="block px-4 py-4 text-lg font-semibold"
+                  href="/statistik"
+                  onClick={closeMenu}
+                >
                   Statistik
                 </Link>
-                <Link className="block px-4 py-4 text-lg font-semibold" href="/taktiktavle">
-                  Taktiktavle
-                </Link>
-                <Link className="block px-4 py-4 text-lg font-semibold" href="/kampe">
+                <Link
+                  className="block px-4 py-4 text-lg font-semibold"
+                  href="/kampe"
+                  onClick={closeMenu}
+                >
                   Kampe
                 </Link>
-                <Link className="block px-4 py-4 text-lg font-semibold" href="/playbook">
-                  Playbook
-                </Link>
-                <Link className="block px-4 py-4 text-lg font-semibold" href="/oevelser">
-                  Øvelser
-                </Link>
-                <Link className="block px-4 py-4 text-lg font-semibold" href="/spiller">
+                <Link
+                  className="block px-4 py-4 text-lg font-semibold"
+                  href="/spiller"
+                  onClick={closeMenu}
+                >
                   Spiller
                 </Link>
                 {isAdmin ? (
-                  <Link className="block px-4 py-4 text-lg font-semibold" href="/admin">
+                  <Link
+                    className="block px-4 py-4 text-lg font-semibold"
+                    href="/admin"
+                    onClick={closeMenu}
+                  >
                     <span className="flex items-center justify-between gap-3">
                       <span>Admin</span>
                       {(adminPendingLeadersCount ?? 0) > 0 ? (
@@ -137,7 +148,11 @@ export default function MobileAppHeader({
                   </Link>
                 ) : null}
                 {user.teamRole === "LEADER" ? (
-                  <Link className="block px-4 py-4 text-lg font-semibold" href="/leder">
+                  <Link
+                    className="block px-4 py-4 text-lg font-semibold"
+                    href="/leder"
+                    onClick={closeMenu}
+                  >
                     <span className="flex items-center justify-between gap-3">
                       <span>Leder</span>
                       {(leaderPendingCount ?? 0) > 0 ? (
@@ -157,7 +172,11 @@ export default function MobileAppHeader({
                   Log ud
                 </button>
 
-                <Link className="block px-4 py-4 text-lg font-semibold" href="/tilfoej-rolle">
+                <Link
+                  className="block px-4 py-4 text-lg font-semibold"
+                  href="/tilfoej-rolle"
+                  onClick={closeMenu}
+                >
                   Tilføj Rolle
                 </Link>
               </nav>
