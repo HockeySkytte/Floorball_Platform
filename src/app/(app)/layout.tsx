@@ -9,6 +9,7 @@ import MobileAppHeader from "@/components/MobileAppHeader";
 import StatsFiltersProvider from "@/components/stats/StatsFiltersProvider";
 import TaktiktavleProvider from "@/components/taktiktavle/TaktiktavleProvider";
 import AppSidebarContent from "@/components/AppSidebarContent";
+import { getOrCreateAppLeagueId } from "@/lib/league";
 
 export default async function AppLayout({
   children,
@@ -25,8 +26,11 @@ export default async function AppLayout({
   const session = await getSession();
   const selectedTeamId = isAdmin ? session.selectedTeamId ?? null : null;
 
+  const appLeagueId = await getOrCreateAppLeagueId();
+
   const teams = isAdmin
     ? await prisma.team.findMany({
+        where: { leagueId: appLeagueId },
         select: { id: true, name: true, logoUrl: true },
         orderBy: { name: "asc" },
       })

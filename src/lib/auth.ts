@@ -1,12 +1,15 @@
 import { ApprovalStatus, GlobalRole, TeamRole } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
+import { getOrCreateAppLeagueId } from "@/lib/league";
 
 export type CurrentUser = NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>;
 
 export async function getCurrentUser() {
   const session = await getSession();
   if (!session.userId) return null;
+
+  const appLeagueId = await getOrCreateAppLeagueId();
 
   const user = await prisma.user.findUnique({
     where: { id: session.userId },
@@ -31,7 +34,9 @@ export async function getCurrentUser() {
     if (selectedTeamId) {
       activeTeam =
         user.memberships.find((m) => m.teamId === selectedTeamId)?.team ??
-        (await prisma.team.findUnique({ where: { id: selectedTeamId } }));
+        (await prisma.team.findFirst({
+          where: { id: selectedTeamId, leagueId: appLeagueId },
+        }));
 
       if (activeTeam) {
         activeTeamId = activeTeam.id;
@@ -40,6 +45,7 @@ export async function getCurrentUser() {
         await session.save();
 
         const firstTeam = await prisma.team.findFirst({
+          where: { leagueId: appLeagueId },
           orderBy: { name: "asc" },
         });
         activeTeam = firstTeam;
@@ -47,6 +53,7 @@ export async function getCurrentUser() {
       }
     } else {
       const firstTeam = await prisma.team.findFirst({
+        where: { leagueId: appLeagueId },
         orderBy: { name: "asc" },
       });
       activeTeam = firstTeam;
@@ -59,8 +66,10 @@ export async function getCurrentUser() {
     }
   } else {
     activeMembership =
-      user.memberships.find((m) => m.status === ApprovalStatus.APPROVED) ??
-      user.memberships[0] ??
+      user.memberships.find(
+        (m) => m.status === ApprovalStatus.APPROVED && m.team.leagueId === appLeagueId
+      ) ??
+      user.memberships.find((m) => m.team.leagueId === appLeagueId) ??
       null;
     activeTeam = activeMembership?.team ?? null;
     activeTeamId = activeMembership?.teamId ?? null;

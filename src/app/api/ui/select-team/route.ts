@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
+import { getOrCreateAppLeagueId } from "@/lib/league";
 
 export async function POST(req: Request) {
   await requireAdmin();
@@ -12,8 +13,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ message: "teamId mangler." }, { status: 400 });
   }
 
-  const team = await prisma.team.findUnique({
-    where: { id: teamId },
+  const appLeagueId = await getOrCreateAppLeagueId();
+
+  const team = await prisma.team.findFirst({
+    where: { id: teamId, leagueId: appLeagueId },
     select: { id: true },
   });
 

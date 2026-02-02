@@ -2,12 +2,14 @@ import { prisma } from "@/lib/prisma";
 
 function getConfiguredLeagueId() {
   const v = (process.env.APP_LEAGUE_ID ?? "").trim();
-  return v.length > 0 ? v : "floorball-platform";
+  // Default to the shared "Standard Liga" league used by this app.
+  // Render may not have APP_LEAGUE_ID configured yet; this prevents cross-app mixing.
+  return v.length > 0 ? v : "league_default";
 }
 
 function getConfiguredLeagueName() {
   const v = (process.env.APP_LEAGUE_NAME ?? "").trim();
-  return v.length > 0 ? v : "Floorball Platform";
+  return v.length > 0 ? v : "Standard Liga";
 }
 
 export async function getOrCreateAppLeagueId(): Promise<string> {
