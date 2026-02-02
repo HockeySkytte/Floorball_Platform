@@ -2,11 +2,15 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { TeamColor } from "@prisma/client";
+import { getOrCreateAppLeagueId } from "@/lib/league";
 
 export async function GET() {
   await requireAdmin();
 
+  const leagueId = await getOrCreateAppLeagueId();
+
   const teams = await prisma.team.findMany({
+    where: { leagueId },
     select: {
       id: true,
       name: true,
@@ -37,7 +41,9 @@ export async function POST(req: Request) {
     );
   }
 
-  const existing = await prisma.team.findUnique({ where: { name } });
+  const leagueId = await getOrCreateAppLeagueId();
+
+  const existing = await prisma.team.findFirst({ where: { leagueId, name } });
   if (existing) {
     return NextResponse.json(
       { message: "Hold findes allerede." },
@@ -85,6 +91,7 @@ export async function POST(req: Request) {
       logoUrl,
       themePrimary: themePrimary as TeamColor,
       themeSecondary: themeSecondary as TeamColor,
+      leagueId,
     },
   });
   return NextResponse.json({

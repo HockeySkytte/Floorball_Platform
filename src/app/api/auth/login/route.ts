@@ -2,17 +2,20 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { hashPassword, verifyPassword } from "@/lib/password";
+import { getOrCreateAppLeagueId } from "@/lib/league";
 
 async function ensureBootstrapAdmin() {
   const adminEmail = (process.env.ADMIN_EMAIL ?? "").trim().toLowerCase();
   const adminPassword = process.env.ADMIN_PASSWORD ?? "";
   if (!adminEmail || !adminPassword) return;
 
+  const leagueId = await getOrCreateAppLeagueId();
+
   const passwordHash = await hashPassword(adminPassword);
   const desiredUsername = "admin";
 
-  const existingByUsername = await prisma.user.findUnique({
-    where: { username: desiredUsername },
+  const existingByUsername = await prisma.user.findFirst({
+    where: { leagueId, username: desiredUsername },
   });
 
   if (!existingByUsername) {
@@ -22,11 +25,12 @@ async function ensureBootstrapAdmin() {
         email: adminEmail,
         username: desiredUsername,
         passwordHash,
+        leagueId,
       },
     });
   } else {
-    const emailOwner = await prisma.user.findUnique({
-      where: { email: adminEmail },
+    const emailOwner = await prisma.user.findFirst({
+      where: { leagueId, email: adminEmail },
       select: { id: true },
     });
 
@@ -37,12 +41,13 @@ async function ensureBootstrapAdmin() {
       data: {
         globalRole: "ADMIN",
         passwordHash,
+        leagueId,
         ...(canSetEmail ? { email: adminEmail } : {}),
       },
     });
   }
 
-  const existingTeams = await prisma.team.count();
+  const existingTeams = await prisma.team.count({ where: { leagueId } });
   if (existingTeams === 0) {
     const teams = ["U19 herrelandsholdet", "U17 herrelandsholdet"];
     for (const name of teams) {
@@ -51,6 +56,7 @@ async function ensureBootstrapAdmin() {
           name,
           themePrimary: "RED",
           themeSecondary: "WHITE",
+          leagueId,
         },
       });
     }
@@ -94,8 +100,11 @@ export async function POST(req: Request) {
       await ensureBootstrapAdmin();
     }
 
+    const leagueId = await getOrCreateAppLeagueId();
+
     const user = await prisma.user.findFirst({
       where: {
+        leagueId,
         OR: [
           { email: emailOrUsername.toLowerCase() },
           { username: emailOrUsername },

@@ -4,11 +4,20 @@ import { PrismaClient, GlobalRole } from "@prisma/client";
 const prisma = new PrismaClient();
 
 async function main() {
+  const now = new Date();
+  const leagueId = (process.env.APP_LEAGUE_ID ?? "").trim() || "floorball-platform";
+
+  await prisma.league.upsert({
+    where: { id: leagueId },
+    update: { name: "Floorball Platform", updatedAt: now },
+    create: { id: leagueId, name: "Floorball Platform", createdAt: now, updatedAt: now },
+  });
+
   const teams = ["U19 herrelandsholdet", "U17 herrelandsholdet"];
 
   for (const name of teams) {
     await prisma.team.upsert({
-      where: { name },
+      where: { leagueId_name: { leagueId, name } },
       update: {
         themePrimary: "RED",
         themeSecondary: "WHITE",
@@ -17,6 +26,7 @@ async function main() {
         name,
         themePrimary: "RED",
         themeSecondary: "WHITE",
+        leagueId,
       },
     });
   }
@@ -26,8 +36,8 @@ async function main() {
   const passwordHash = await bcrypt.hash(adminPassword, 12);
 
   const desiredUsername = "admin";
-  const existingByUsername = await prisma.user.findUnique({
-    where: { username: desiredUsername },
+  const existingByUsername = await prisma.user.findFirst({
+    where: { leagueId, username: desiredUsername },
   });
 
   if (!existingByUsername) {
@@ -37,13 +47,14 @@ async function main() {
         email: adminEmail,
         username: desiredUsername,
         passwordHash,
+        leagueId,
       },
     });
     return;
   }
 
-  const emailOwner = await prisma.user.findUnique({
-    where: { email: adminEmail },
+  const emailOwner = await prisma.user.findFirst({
+    where: { leagueId, email: adminEmail },
     select: { id: true },
   });
 
@@ -54,6 +65,7 @@ async function main() {
     data: {
       globalRole: GlobalRole.ADMIN,
       passwordHash,
+      leagueId,
       ...(canSetEmail ? { email: adminEmail } : {}),
     },
   });

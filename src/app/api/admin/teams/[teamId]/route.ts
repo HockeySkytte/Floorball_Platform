@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { TeamColor } from "@prisma/client";
+import { getOrCreateAppLeagueId } from "@/lib/league";
 
 function parseLogoUrl(raw: unknown) {
   const v = String(raw ?? "").trim();
@@ -66,16 +67,25 @@ export async function PATCH(
 
   const existing = await prisma.team.findUnique({
     where: { id },
-    select: { id: true, name: true },
+    select: { id: true, name: true, leagueId: true },
   });
 
   if (!existing) {
     return NextResponse.json({ message: "Hold findes ikke." }, { status: 404 });
   }
 
+  const leagueId = await getOrCreateAppLeagueId();
+  if (existing.leagueId !== leagueId) {
+    return NextResponse.json({ message: "Hold findes ikke." }, { status: 404 });
+  }
+
   if (existing.name !== name) {
-    const conflict = await prisma.team.findUnique({
-      where: { name },
+    const conflict = await prisma.team.findFirst({
+      where: {
+        leagueId: existing.leagueId,
+        name,
+        NOT: { id: existing.id },
+      },
       select: { id: true },
     });
     if (conflict) {
@@ -141,10 +151,15 @@ export async function DELETE(
 
   const team = await prisma.team.findUnique({
     where: { id },
-    select: { id: true, name: true },
+    select: { id: true, name: true, leagueId: true },
   });
 
   if (!team) {
+    return NextResponse.json({ message: "Hold findes ikke." }, { status: 404 });
+  }
+
+  const leagueId = await getOrCreateAppLeagueId();
+  if (team.leagueId !== leagueId) {
     return NextResponse.json({ message: "Hold findes ikke." }, { status: 404 });
   }
 

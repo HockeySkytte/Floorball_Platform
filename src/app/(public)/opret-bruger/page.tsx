@@ -10,6 +10,7 @@ type Role = "LEADER" | "PLAYER" | "SUPPORTER";
 export default function SignupPage() {
   const router = useRouter();
   const [teams, setTeams] = useState<Team[]>([]);
+  const [teamsError, setTeamsError] = useState<string | null>(null);
   const [teamId, setTeamId] = useState<string>("");
   const [role, setRole] = useState<Role>("PLAYER");
   const [email, setEmail] = useState("");
@@ -20,14 +21,33 @@ export default function SignupPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    fetch("/api/public/teams")
-      .then((r) => r.json())
-      .then((data) => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setTeamsError(null);
+        const res = await fetch("/api/public/teams", { cache: "no-store" });
+        const data = await res.json().catch(() => ({}));
+
+        if (cancelled) return;
+
+        if (!res.ok) {
+          setTeams([]);
+          setTeamsError(data?.message ?? "Kunne ikke hente hold.");
+          return;
+        }
+
         setTeams(data?.teams ?? []);
-      })
-      .catch(() => {
+      } catch {
+        if (cancelled) return;
         setTeams([]);
-      });
+        setTeamsError("Kunne ikke hente hold.");
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const requiresTeam = useMemo(() => true, []);
@@ -91,6 +111,7 @@ export default function SignupPage() {
               </option>
             ))}
           </select>
+          {teamsError ? <p className="mt-1 text-sm text-red-600">{teamsError}</p> : null}
         </div>
 
         <div>
