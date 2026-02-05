@@ -101,6 +101,7 @@ export default function LeaderPage() {
 
   const [editOpen, setEditOpen] = useState(false);
   const [editMember, setEditMember] = useState<MemberRow | null>(null);
+  const [editEmail, setEditEmail] = useState("");
   const [editName, setEditName] = useState("");
   const [editImageUrl, setEditImageUrl] = useState("");
   const [editPosition, setEditPosition] = useState("");
@@ -633,6 +634,7 @@ export default function LeaderPage() {
   function openEdit(m: MemberRow) {
     setEditError(null);
     setEditMember(m);
+    setEditEmail(m.user.email ?? "");
     setEditName(m.user.name ?? "");
     setEditImageUrl(m.user.imageUrl ?? "");
     setEditPosition((m.user.position ?? "") as string);
@@ -654,6 +656,7 @@ export default function LeaderPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: editMember.user.id,
+          email: editEmail,
           name: editName,
           imageUrl: editImageUrl,
           position: editPosition,
@@ -1464,6 +1467,22 @@ export default function LeaderPage() {
               <div className="text-xs text-zinc-600">
                 {editMember.user.email} • {editMember.user.username}
               </div>
+
+              <label className="block">
+                <div className="text-xs font-semibold text-zinc-700">Email</div>
+                <input
+                  type="email"
+                  className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm disabled:opacity-70"
+                  value={editEmail}
+                  onChange={(e) => setEditEmail(e.target.value)}
+                  disabled={editBusy || editMember.role === "LEADER"}
+                />
+                {editMember.role === "LEADER" ? (
+                  <div className="mt-1 text-xs text-zinc-600">
+                    Email kan ikke ændres for ledere her.
+                  </div>
+                ) : null}
+              </label>
 
               <label className="block">
                 <div className="text-xs font-semibold text-zinc-700">Navn</div>

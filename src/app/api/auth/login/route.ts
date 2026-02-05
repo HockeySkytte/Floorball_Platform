@@ -102,15 +102,39 @@ export async function POST(req: Request) {
 
     const leagueId = await getOrCreateAppLeagueId();
 
-    const user = await prisma.user.findFirst({
-      where: {
-        leagueId,
-        OR: [
-          { email: emailOrUsername.toLowerCase() },
-          { username: emailOrUsername },
-        ],
-      },
-    });
+    const looksLikeEmail = emailOrUsername.includes("@");
+
+    const user = looksLikeEmail
+      ? await (async () => {
+          const email = emailOrUsername.toLowerCase();
+          const matches = await prisma.user.findMany({
+            where: { leagueId, email },
+            select: { id: true, passwordHash: true },
+            take: 2,
+          });
+
+          if (matches.length === 0) return null;
+          if (matches.length > 1) {
+            return "AMBIGUOUS_EMAIL" as const;
+          }
+          return await prisma.user.findUnique({ where: { id: matches[0]!.id } });
+        })()
+      : await prisma.user.findFirst({
+          where: {
+            leagueId,
+            username: emailOrUsername,
+          },
+        });
+
+    if (user === "AMBIGUOUS_EMAIL") {
+      return NextResponse.json(
+        {
+          message:
+            "Denne email bruges af flere brugere. Log ind med dit brugernavn i stedet.",
+        },
+        { status: 409 }
+      );
+    }
 
     if (!user) {
       return NextResponse.json({ message: "Forkert login." }, { status: 401 });

@@ -263,7 +263,6 @@ model User {
   testResults TeamTestResult[]
   readinessEntries TeamReadinessEntry[]
 
-  @@unique([leagueId, email])
   @@unique([leagueId, username])
 }
 

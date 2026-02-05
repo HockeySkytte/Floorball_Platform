@@ -55,17 +55,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "Ugyldigt hold." }, { status: 400 });
     }
 
-    const existing = await prisma.user.findFirst({
+    const existingUsername = await prisma.user.findFirst({
       where: {
         leagueId: appLeagueId,
-        OR: [{ email }, { username }],
+        username,
       },
       select: { id: true },
     });
 
-    if (existing) {
+    if (existingUsername) {
       return NextResponse.json(
-        { message: "Email eller brugernavn er allerede i brug." },
+        { message: "Brugernavn er allerede i brug." },
         { status: 409 }
       );
     }
@@ -104,7 +104,7 @@ export async function POST(req: Request) {
       (err as any).code === "P2002"
     ) {
       return NextResponse.json(
-        { message: "Email eller brugernavn er allerede i brug." },
+        { message: "Brugernavn er allerede i brug." },
         { status: 409 }
       );
     }

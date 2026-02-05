@@ -23,6 +23,14 @@ function normalizePhoneNumber(input: unknown): string | null {
   return s ? s : null;
 }
 
+function normalizeEmail(input: unknown): string | null {
+  const s = String(input ?? "").trim().toLowerCase();
+  if (!s) return null;
+  // Keep it simple: avoid rejecting valid-but-weird emails.
+  if (!/^\S+@\S+\.[^\s]+$/.test(s)) return null;
+  return s;
+}
+
 function normalizeBirthDate(input: unknown): Date | null {
   const s = String(input ?? "").trim();
   if (!s) return null;
@@ -76,11 +84,17 @@ export async function PATCH(req: Request) {
 
   const body = await req.json().catch(() => null);
   const userId = String(body?.userId ?? "").trim();
+  const emailRaw = String(body?.email ?? "").trim();
+  const email = emailRaw ? normalizeEmail(emailRaw) : undefined;
   const name = normalizeName(body?.name);
   const imageUrl = normalizeImageUrl(body?.imageUrl);
   const position = normalizePosition(body?.position);
   const phoneNumber = normalizePhoneNumber(body?.phoneNumber);
   const birthDate = normalizeBirthDate(body?.birthDate);
+
+  if (emailRaw && !email) {
+    return NextResponse.json({ message: "Email er ugyldig." }, { status: 400 });
+  }
 
   if (String(body?.birthDate ?? "").trim() && !birthDate) {
     return NextResponse.json({ message: "Fødselsdato er ugyldig. Brug format YYYY-MM-DD." }, { status: 400 });
@@ -92,16 +106,27 @@ export async function PATCH(req: Request) {
 
   const membership = await prisma.teamMembership.findUnique({
     where: { userId_teamId: { userId, teamId } },
-    select: { id: true },
+    select: { id: true, role: true },
   });
 
   if (!membership) {
     return NextResponse.json({ message: "Ugyldig bruger for dette hold." }, { status: 404 });
   }
 
+  // Requirement: leaders should only edit email for non-leaders.
+  if (email !== undefined) {
+    const allowedRoles = [TeamRole.PLAYER, TeamRole.SUPPORTER] as const;
+    if (!allowedRoles.includes(membership.role as (typeof allowedRoles)[number])) {
+      return NextResponse.json(
+        { message: "Email kan kun ændres for spillere/supportere." },
+        { status: 400 }
+      );
+    }
+  }
+
   const updated = await prisma.user.update({
     where: { id: userId },
-    data: { name, imageUrl, position, birthDate, phoneNumber } as any,
+    data: { name, imageUrl, position, birthDate, phoneNumber, ...(email !== undefined ? { email } : {}) } as any,
   });
 
   return NextResponse.json({

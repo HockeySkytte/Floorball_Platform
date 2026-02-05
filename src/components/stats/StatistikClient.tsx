@@ -1072,12 +1072,14 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
     // We intentionally do NOT require coordinates for tables.
     const gameSel = norm(filters.kamp);
     const strengthSel = norm(filters.styrke);
+    const eventSel = norm(filters.event);
     const goalieSel = norm(filters.maalmand);
     const onIceSel = filters.paaBanen.map((x) => norm(x)).filter(Boolean);
 
     return events.filter((e) => {
       if (gameSel && norm(e.gameId) !== gameSel) return false;
       if (strengthSel && norm(e.strength) !== strengthSel) return false;
+      if (eventSel && norm(e.event) !== eventSel) return false;
       if (goalieSel && norm(e.goalieName) !== goalieSel) return false;
 
       if (onIceSel.length > 0) {
@@ -1490,6 +1492,7 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
     const pSel = norm(filters.perspektiv);
     const gameSel = norm(filters.kamp);
     const strengthSel = norm(filters.styrke);
+    const eventSel = norm(filters.event);
     const playerSel = norm(filters.spiller);
     const goalieSel = norm(filters.maalmand);
     const onIceSel = filters.paaBanen.map((x) => norm(x)).filter(Boolean);
@@ -1502,6 +1505,8 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
       if (gameSel && norm(e.gameId) !== gameSel) return false;
 
       if (strengthSel && norm(e.strength) !== strengthSel) return false;
+
+      if (eventSel && norm(e.event) !== eventSel) return false;
 
       if (goalieSel && norm(e.goalieName) !== goalieSel) return false;
 
@@ -1531,6 +1536,7 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
 
     const gameSel = norm(filters.kamp);
     const strengthSel = norm(filters.styrke);
+    const eventSel = norm(filters.event);
     const playerSel = norm(filters.spiller);
     const goalieSel = norm(filters.maalmand);
     const onIceSel = filters.paaBanen.map((x) => norm(x)).filter(Boolean);
@@ -1538,6 +1544,8 @@ export default function StatistikClient({ isLeader }: { isLeader: boolean }) {
     return events.filter((e) => {
       // Only show shot-like events on the map
       if (!isShotLikeEvent(e.event)) return false;
+
+      if (eventSel && norm(e.event) !== eventSel) return false;
 
       if (gameSel && norm(e.gameId) !== gameSel) return false;
 

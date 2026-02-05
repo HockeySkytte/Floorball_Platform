@@ -11,6 +11,7 @@ type StatsEvent = {
   gameDate?: string | null;
   teamHome?: string | null;
   teamAway?: string | null;
+  event?: string | null;
   strength?: string | null;
   p1Name: string | null;
   p2Name: string | null;
@@ -30,7 +31,16 @@ export default function StatsSidebarSlicers() {
   const pathname = usePathname();
   const show = pathname === "/statistik" || pathname.startsWith("/statistik/");
 
-  const { filters, setPerspektiv, setKamp, setStyrke, setSpiller, setMaalmand, setPaaBanen } =
+  const {
+    filters,
+    setPerspektiv,
+    setKamp,
+    setStyrke,
+    setEvent,
+    setSpiller,
+    setMaalmand,
+    setPaaBanen,
+  } =
     useStatsFilters();
 
   const [events, setEvents] = useState<StatsEvent[]>([]);
@@ -56,6 +66,7 @@ export default function StatsSidebarSlicers() {
   const options = useMemo(() => {
     const perspectives = new Set<string>();
     const strengths = new Set<string>();
+    const eventsList = new Set<string>();
     const players = new Set<string>();
     const goalies = new Set<string>();
     const onIce = new Set<string>();
@@ -70,6 +81,8 @@ export default function StatsSidebarSlicers() {
       else if (e.perspective) perspectives.add(e.perspective);
 
       if (e.strength) strengths.add(e.strength);
+
+      if (e.event) eventsList.add(e.event);
 
       if (e.p1Name) players.add(e.p1Name);
       if (e.p2Name) players.add(e.p2Name);
@@ -125,6 +138,7 @@ export default function StatsSidebarSlicers() {
       perspectives: Array.from(perspectives).sort(sortAlpha),
       games: gamesList,
       strengths: Array.from(strengths).sort(sortAlpha),
+      events: Array.from(eventsList).sort(sortAlpha),
       players: Array.from(players).sort(sortAlpha),
       goalies: Array.from(goalies).sort(sortAlpha),
       onIce: Array.from(onIce).sort(sortAlpha),
@@ -184,6 +198,22 @@ export default function StatsSidebarSlicers() {
         >
           <option value="">Alle</option>
           {options.strengths.map((v) => (
+            <option key={v} value={v}>
+              {v}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className="block text-xs">
+        <div className="mb-0.5 font-semibold">Event</div>
+        <select
+          className="w-full rounded-md border border-zinc-300 bg-white px-2 py-1.5 text-xs text-zinc-900 disabled:opacity-70"
+          value={filters.event}
+          onChange={(e) => setEvent(e.target.value)}
+        >
+          <option value="">Alle</option>
+          {options.events.map((v) => (
             <option key={v} value={v}>
               {v}
             </option>
