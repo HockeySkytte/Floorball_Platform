@@ -19,6 +19,7 @@ export async function GET(req: Request) {
     take: limit,
     select: {
       id: true,
+      rowId: true,
       timestamp: true,
       period: true,
       event: true,

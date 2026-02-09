@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 export type VideoEvent = {
   id: string;
+  rowId?: number | null;
   event: string;
   teamName?: string | null;
   strength?: string | null;
@@ -116,7 +117,19 @@ export default function VideoSection({
   } | null>(null);
 
   const rows = useMemo(() => {
-    return events.map((e) => {
+    const sorted = [...events].sort((a, b) => {
+      const ar = typeof a.rowId === "number" && Number.isFinite(a.rowId) ? a.rowId : Infinity;
+      const br = typeof b.rowId === "number" && Number.isFinite(b.rowId) ? b.rowId : Infinity;
+      if (ar !== br) return ar - br;
+
+      const at = typeof a.videoTime === "number" && Number.isFinite(a.videoTime) ? a.videoTime : Infinity;
+      const bt = typeof b.videoTime === "number" && Number.isFinite(b.videoTime) ? b.videoTime : Infinity;
+      if (at !== bt) return at - bt;
+
+      return String(a.id).localeCompare(String(b.id));
+    });
+
+    return sorted.map((e) => {
       const ytId = parseYouTubeId(e.videoUrl ?? null);
       const t = typeof e.videoTime === "number" && Number.isFinite(e.videoTime) ? e.videoTime : null;
       const start = t !== null ? Math.max(0, Math.floor(t - beforeSec)) : null;

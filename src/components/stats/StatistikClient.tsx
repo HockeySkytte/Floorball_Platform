@@ -16,6 +16,7 @@ type StatsFile = {
 
 type StatsEvent = {
   id: string;
+  rowId?: number | null;
   timestamp: string | null;
   period: number | null;
   event: string;
