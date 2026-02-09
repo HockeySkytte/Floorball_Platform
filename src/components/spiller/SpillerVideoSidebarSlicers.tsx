@@ -35,6 +35,11 @@ export default function SpillerVideoSidebarSlicers() {
     if (!show) return;
     if (tab !== "video") return;
 
+    // Default to "Individuelt" on the video tab.
+    if (filters.scope === "") {
+      setScope("individual");
+    }
+
     let cancelled = false;
 
     (async () => {
@@ -48,7 +53,7 @@ export default function SpillerVideoSidebarSlicers() {
     return () => {
       cancelled = true;
     };
-  }, [show, tab]);
+  }, [show, tab, filters.scope, setScope]);
 
   const options = useMemo(() => {
     const strengths = new Set<string>();

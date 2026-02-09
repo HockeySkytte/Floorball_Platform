@@ -59,6 +59,12 @@ export default function TopNav({
               Spiller
             </Link>
 
+            {user && (user.isAdmin || user.teamRole === "LEADER") ? (
+              <Link className="hover:underline" href="/video">
+                Video
+              </Link>
+            ) : null}
+
             {user?.isAdmin ? (
               <Link className="hover:underline" href="/admin">
                 <span className="inline-flex items-center gap-2">
@@ -130,6 +136,16 @@ export default function TopNav({
                 >
                   Spiller
                 </Link>
+
+                {user && (user.isAdmin || user.teamRole === "LEADER") ? (
+                  <Link
+                    className="rounded px-2 py-1 hover:bg-zinc-50"
+                    href="/video"
+                    onClick={() => closeDetails(mobileMenuRef)}
+                  >
+                    Video
+                  </Link>
+                ) : null}
 
                 {user?.isAdmin ? (
                   <Link

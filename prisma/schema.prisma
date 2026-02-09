@@ -49,6 +49,8 @@ enum JsonDocumentScope {
 enum JsonDocumentKind {
   PLAYBOOK
   EXERCISE
+  VIDEO_CLIP
+  PLAYER_VIDEO_CLIPS
 }
 
 enum TestType {

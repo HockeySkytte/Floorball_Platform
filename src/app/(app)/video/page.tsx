@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import LeaderVideoEditor from "@/components/video/LeaderVideoEditor";
 
 export default function VideoPage() {
-  redirect("/statistik");
+  return <LeaderVideoEditor />;
 }

@@ -3,12 +3,27 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useStatsFilters } from "@/components/stats/StatsFiltersProvider";
-import VideoSection, { type VideoEvent } from "@/components/stats/VideoSection";
+import { type VideoEvent } from "@/components/stats/VideoSection";
+import SpillerVideoPlayer, { type AssignedVideoClip } from "@/components/stats/SpillerVideoPlayer";
 import {
   BEEP_BOUNDS,
   closestRowByDecimal,
   rowByNiveau,
 } from "@/lib/beepTestTable";
+
+
+type PlayerVideoClipsResponse = {
+  ok: boolean;
+  playerId: string;
+  clips: AssignedVideoClip[];
+  message?: string;
+};
+
+type LeaderVideoClipsResponse = {
+  teamId: string;
+  clips: { id: string; title: string; createdAt: string; updatedAt: string }[];
+  message?: string;
+};
 
 type Role = "LEADER" | "PLAYER" | "SUPPORTER" | null;
 
@@ -998,6 +1013,20 @@ export default function SpillerPage() {
   const [videoError, setVideoError] = useState<string | null>(null);
   const [videoEvents, setVideoEvents] = useState<VideoEvent[]>([]);
 
+  const [assignedLoading, setAssignedLoading] = useState(false);
+  const [assignedError, setAssignedError] = useState<string | null>(null);
+  const [assignedClips, setAssignedClips] = useState<AssignedVideoClip[]>([]);
+
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [assignBusy, setAssignBusy] = useState(false);
+  const [assignError, setAssignError] = useState<string | null>(null);
+  const [leaderClips, setLeaderClips] = useState<LeaderVideoClipsResponse["clips"]>([]);
+  const [leaderClipsLoading, setLeaderClipsLoading] = useState(false);
+  const [leaderClipSearch, setLeaderClipSearch] = useState("");
+  const [assignClipId, setAssignClipId] = useState<string | null>(null);
+  const [assignMode, setAssignMode] = useState<"single" | "all">("single");
+  const [assignPlayerId, setAssignPlayerId] = useState<string | null>(null);
+
   async function loadVideoEvents() {
     setVideoLoading(true);
     setVideoError(null);
@@ -1021,6 +1050,124 @@ export default function SpillerPage() {
     loadVideoEvents();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
+
+  async function loadAssignedClips() {
+    if (tab !== "video") return;
+    setAssignedLoading(true);
+    setAssignedError(null);
+    try {
+      const url = new URL("/api/player/video-clips", window.location.origin);
+      if (selectedPlayerId && selectedPlayerId !== "ALL") {
+        url.searchParams.set("playerId", selectedPlayerId);
+      }
+      const res = await fetch(url.toString(), { cache: "no-store" });
+      const data = (await res.json().catch(() => ({}))) as PlayerVideoClipsResponse;
+      if (!res.ok || !data?.ok) {
+        setAssignedError((data as any)?.message ?? "Kunne ikke hente klip.");
+        setAssignedClips([]);
+        return;
+      }
+      setAssignedClips(Array.isArray(data.clips) ? data.clips : []);
+    } finally {
+      setAssignedLoading(false);
+    }
+  }
+
+  async function deleteAssignedClip(clipId: string) {
+    if (!isLeaderOrAdmin) return;
+    if (!selectedPlayerId || selectedPlayerId === "ALL") return;
+    const ok = window.confirm("Slet klippet fra spilleren?");
+    if (!ok) return;
+    const res = await fetch("/api/player/video-clips", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: "single", playerId: selectedPlayerId, clipId }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setAssignedError(data?.message ?? "Kunne ikke slette klip.");
+      return;
+    }
+    await loadAssignedClips();
+  }
+
+  useEffect(() => {
+    if (tab !== "video") return;
+    if (selectedPlayerId === "ALL") {
+      setAssignedClips([]);
+      setAssignedError(null);
+      return;
+    }
+    void loadAssignedClips();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, selectedPlayerId, isLeaderOrAdmin]);
+
+  async function loadLeaderClips() {
+    if (!isLeaderOrAdmin) return;
+    setLeaderClipsLoading(true);
+    try {
+      const res = await fetch("/api/leader/video-clips", { cache: "no-store" });
+      const data = (await res.json().catch(() => ({}))) as LeaderVideoClipsResponse;
+      if (!res.ok) {
+        setAssignError(data?.message ?? "Kunne ikke hente videoklip.");
+        setLeaderClips([]);
+        return;
+      }
+      setLeaderClips(Array.isArray(data?.clips) ? data.clips : []);
+    } finally {
+      setLeaderClipsLoading(false);
+    }
+  }
+
+  function openAssignModal() {
+    setAssignError(null);
+    setLeaderClipSearch("");
+    const defaultMode = selectedPlayerId === "ALL" ? "all" : "single";
+    setAssignMode(defaultMode);
+    const defaultPlayer =
+      selectedPlayerId && selectedPlayerId !== "ALL"
+        ? selectedPlayerId
+        : (players[0]?.id ?? null);
+    setAssignPlayerId(defaultPlayer);
+    setAssignClipId(null);
+    setAssignOpen(true);
+    void loadLeaderClips();
+  }
+
+  async function submitAssign() {
+    if (!isLeaderOrAdmin) return;
+    if (!assignClipId) {
+      setAssignError("Vælg et klip.");
+      return;
+    }
+    if (assignMode === "single" && !assignPlayerId) {
+      setAssignError("Vælg en spiller.");
+      return;
+    }
+
+    setAssignBusy(true);
+    setAssignError(null);
+    try {
+      const res = await fetch("/api/player/video-clips", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: assignMode,
+          playerId: assignMode === "single" ? assignPlayerId : undefined,
+          clipId: assignClipId,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setAssignError(data?.message ?? "Kunne ikke tilføje klip.");
+        return;
+      }
+      setAssignOpen(false);
+      await loadAssignedClips();
+    } finally {
+      setAssignBusy(false);
+    }
+  }
 
   const filteredVideoEvents = useMemo(() => {
     const kamp = String(statsFilters.kamp ?? "").trim();
@@ -1580,6 +1727,23 @@ export default function SpillerPage() {
 
           {tab === "video" ? (
             <div className="space-y-3">
+              {isLeaderOrAdmin ? (
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-sm text-zinc-600">
+                    Tilføj gemte klip til spillere.
+                  </div>
+                  <button
+                    type="button"
+                    className="rounded-md px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                    style={{ background: "var(--brand)", color: "var(--brand-foreground)" }}
+                    onClick={openAssignModal}
+                    disabled={players.length === 0}
+                  >
+                    Tilføj klip
+                  </button>
+                </div>
+              ) : null}
+
               {selectedPlayerId === "ALL" ? (
                 <div className="rounded-md border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-600">
                   Vælg en spiller for at se video
@@ -1588,12 +1752,160 @@ export default function SpillerPage() {
                 <>
                   {videoError ? <p className="text-sm text-red-600">{videoError}</p> : null}
                   {videoLoading ? <p className="text-sm text-zinc-600">Henter…</p> : null}
-                  <VideoSection title="" events={filteredVideoEvents} showTable={false} />
+                  {assignedError ? <div className="text-sm text-red-600">{assignedError}</div> : null}
+
+                  <SpillerVideoPlayer
+                    events={filteredVideoEvents}
+                    assignedClips={assignedClips}
+                    assignedLoading={assignedLoading}
+                    canDeleteAssigned={isLeaderOrAdmin}
+                    onDeleteAssigned={deleteAssignedClip}
+                  />
                 </>
               )}
             </div>
           ) : null}
       </div>
+
+      {assignOpen ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget && !assignBusy) setAssignOpen(false);
+          }}
+        >
+          <div className="w-full max-w-3xl overflow-hidden rounded-lg bg-white shadow-xl">
+            <div className="flex items-center justify-between gap-2 border-b border-zinc-200 px-4 py-3">
+              <div className="text-sm font-semibold">Tilføj klip</div>
+              <button
+                type="button"
+                onClick={() => setAssignOpen(false)}
+                className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm"
+                disabled={assignBusy}
+              >
+                Luk
+              </button>
+            </div>
+
+            <div className="space-y-3 p-4">
+              {assignError ? <div className="text-sm text-red-600">{assignError}</div> : null}
+
+              <div className="flex flex-wrap items-center gap-3">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="assignMode"
+                    checked={assignMode === "single"}
+                    onChange={() => setAssignMode("single")}
+                    disabled={assignBusy}
+                  />
+                  Kun én spiller
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="assignMode"
+                    checked={assignMode === "all"}
+                    onChange={() => setAssignMode("all")}
+                    disabled={assignBusy}
+                  />
+                  Alle spillere
+                </label>
+
+                {assignMode === "single" ? (
+                  <select
+                    className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-sm"
+                    value={assignPlayerId ?? ""}
+                    onChange={(e) => setAssignPlayerId(e.target.value || null)}
+                    disabled={assignBusy}
+                  >
+                    <option value="">Vælg spiller…</option>
+                    {players.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.displayName}
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
+
+                <div className="flex-1" />
+
+                <button
+                  type="button"
+                  className="rounded-md px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                  style={{ background: "var(--brand)", color: "var(--brand-foreground)" }}
+                  onClick={submitAssign}
+                  disabled={assignBusy}
+                >
+                  {assignBusy ? "Tilføjer…" : "Tilføj"}
+                </button>
+              </div>
+
+              <label className="block">
+                <div className="text-xs font-semibold text-zinc-700">Søg</div>
+                <input
+                  className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
+                  value={leaderClipSearch}
+                  onChange={(e) => setLeaderClipSearch(e.target.value)}
+                  placeholder="Søg i klip…"
+                  disabled={assignBusy}
+                />
+              </label>
+
+              <div className="max-h-[340px] overflow-auto rounded-md border border-zinc-200">
+                {leaderClipsLoading ? (
+                  <div className="p-3 text-sm text-zinc-600">Henter klip…</div>
+                ) : (
+                  <table className="w-full border-collapse text-sm">
+                    <thead className="sticky top-0 bg-zinc-50 text-left">
+                      <tr className="border-b border-zinc-200">
+                        <th className="px-3 py-2"></th>
+                        <th className="px-3 py-2">Titel</th>
+                        <th className="px-3 py-2">Opdateret</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {leaderClips
+                        .filter((c) => {
+                          const q = leaderClipSearch.trim().toLowerCase();
+                          if (!q) return true;
+                          return String(c.title ?? "").toLowerCase().includes(q);
+                        })
+                        .map((c) => {
+                          const checked = assignClipId === c.id;
+                          return (
+                            <tr
+                              key={c.id}
+                              className={"border-b border-zinc-200 " + (checked ? "bg-zinc-50" : "")}
+                              onClick={() => setAssignClipId(c.id)}
+                              style={{ cursor: "pointer" }}
+                            >
+                              <td className="px-3 py-2">
+                                <input type="radio" name="clipPick" checked={checked} readOnly />
+                              </td>
+                              <td className="px-3 py-2 font-medium">{c.title}</td>
+                              <td className="px-3 py-2 text-zinc-600">{formatDateDK(c.updatedAt)}</td>
+                            </tr>
+                          );
+                        })}
+
+                      {leaderClips.length === 0 ? (
+                        <tr>
+                          <td className="px-3 py-3 text-sm text-zinc-600" colSpan={3}>
+                            Ingen gemte klip.
+                          </td>
+                        </tr>
+                      ) : null}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {editOpen && editEntry ? (
         <div

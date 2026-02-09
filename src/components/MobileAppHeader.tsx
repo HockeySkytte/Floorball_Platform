@@ -131,6 +131,15 @@ export default function MobileAppHeader({
                 >
                   Spiller
                 </Link>
+                {isAdmin || user.teamRole === "LEADER" ? (
+                  <Link
+                    className="block px-4 py-4 text-lg font-semibold"
+                    href="/video"
+                    onClick={closeMenu}
+                  >
+                    Video
+                  </Link>
+                ) : null}
                 {isAdmin ? (
                   <Link
                     className="block px-4 py-4 text-lg font-semibold"
